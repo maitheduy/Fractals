@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bài giảng: Biến đổi tuyến tính với Ma trận 2x2 và Tịnh tiến</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- MathJax -->
+    <script>
+      MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']],
+          processEscapes: true,
+          processEnvironments: true
+        },
+        options: {
+          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+        }
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script"></script>
+
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div class="h-screen w-full grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+
+        <!-- ===== CỘT TRÁI: BÀI GIẢNG ===== -->
+        <div class="flex flex-col h-full bg-white rounded-lg shadow-lg overflow-y-auto">
+            <div class="p-6 flex-grow">
+                <h1 class="text-3xl font-bold text-gray-900 mb-6 border-b pb-4">Ảnh hưởng của ma trận tam giác và tịnh tiến lên tam giác đơn vị</h1>
+
+                <!-- Slide 1: Tổng quan -->
+                <div class="mb-8 p-4 border-l-4 border-blue-500 bg-blue-50 rounded-r-lg">
+                    <h3 class="text-xl font-semibold text-blue-800 mb-2">1. Tổng quan về biến đổi tuyến tính và tịnh tiến</h3>
+                    <p class="text-gray-700">
+                        Khi một ma trận vuông cấp 2 kết hợp với vector tịnh tiến tác động lên tam giác tạo bởi các điểm $(0,0)$, $(1,0)$, và $(0,1)$, nó thực hiện một phép biến đổi tuyến tính (co giãn, xiên) kèm theo tịnh tiến, làm dịch chuyển tam giác trong mặt phẳng.
+                    </p>
+                </div>
+
+                <!-- Slide 2: Ma trận tam giác và vector tịnh tiến -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">2. Ma trận tam giác và vector tịnh tiến</h3>
+                    
+                    <div class="p-4 border-l-4 border-blue-500 bg-blue-50 rounded-r-lg mb-4">
+                        <p class="text-gray-700">
+                           Chúng ta xét hai ánh xạ:
+                        </p>
+                        <p class="text-gray-700 mt-2">
+                            <b>Ánh xạ 1:</b> $$ f_1(x,y) = M_1 \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} u_1 \\ v_1 \end{bmatrix}, \quad M_1 = \begin{bmatrix} a & b \\ 0 & c \end{bmatrix} $$
+                        </p>
+                        <p class="text-gray-700 mt-2">
+                            <b>Ánh xạ 2:</b> $$ f_2(x,y) = M_2 \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} u_2 \\ v_2 \end{bmatrix}, \quad M_2 = \begin{bmatrix} d & 0 \\ e & f \end{bmatrix} $$
+                        </p>
+                        <p class="text-gray-700 mt-2">
+                            Trong đó, $(u_1, v_1)$ và $(u_2, v_2)$ là các vector tịnh tiến, dịch chuyển tam giác sau biến đổi tuyến tính.
+                        </p>
+                    </div>
+
+                    <div class="p-4 border border-gray-200 rounded-lg mb-4">
+                         <h4 class="font-semibold text-gray-700 mb-2">Giải thích chi tiết từng tham số:</h4>
+                         <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="border p-2 font-bold">Tham số</th>
+                                    <th class="border p-2 font-bold">Tác động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="border p-2 font-mono text-red-600 font-bold">$a$</td>
+                                    <td class="border p-2">Co/giãn theo trục x trong $M_1$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-green-600 font-bold">$b$</td>
+                                    <td class="border p-2">Xiên theo trục x trong $M_1$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-blue-600 font-bold">$c$</td>
+                                    <td class="border p-2">Co/giãn theo trục y trong $M_1$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-purple-600 font-bold">$d$</td>
+                                    <td class="border p-2">Co/giãn theo trục x trong $M_2$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-orange-600 font-bold">$e$</td>
+                                    <td class="border p-2">Xiên theo trục y trong $M_2$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-teal-600 font-bold">$f$</td>
+                                    <td class="border p-2">Co/giãn theo trục y trong $M_2$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-pink-600 font-bold">$u_1, u_2$</td>
+                                    <td class="border p-2">Tịnh tiến theo trục x cho $f_1$ và $f_2$.</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-2 font-mono text-indigo-600 font-bold">$v_1, v_2$</td>
+                                    <td class="border p-2">Tịnh tiến theo trục y cho $f_1$ và $f_2$.</td>
+                                </tr>
+                            </tbody>
+                         </table>
+                    </div>
+                </div>
+
+                <!-- Slide 3: Ví dụ và Định thức -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold text-gray-800 mb-3">3. Ví dụ và Ý nghĩa Định thức</h3>
+                    <div class="p-4 border-l-4 border-green-500 bg-green-50 rounded-r-lg mb-4">
+                        <h4 class="font-semibold text-green-800 mb-2">Ví dụ</h4>
+                        <p>Xét ánh xạ: $$ f_1(x,y) = \begin{bmatrix} 2 & 1 \\ 0 & 0.5 \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} 0.5 \\ -0.5 \end{bmatrix} $$</p>
+                        <ul class="list-disc list-inside text-gray-700 mt-2">
+                            <li>$a = 2$: Giãn gấp đôi theo trục x.</li>
+                            <li>$b = 1$: Xiên sang phải.</li>
+                            <li>$c = 0.5$: Co lại còn một nửa theo trục y.</li>
+                            <li>$u_1 = 0.5, v_1 = -0.5$: Tịnh tiến 0.5 đơn vị sang phải và 0.5 đơn vị xuống dưới.</li>
+                        </ul>
+                        <p class="mt-2">Và ánh xạ: $$ f_2(x,y) = \begin{bmatrix} 1 & 0 \\ -1 & 1.5 \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} -0.5 \\ 0.5 \end{bmatrix} $$</p>
+                        <ul class="list-disc list-inside text-gray-700 mt-2">
+                            <li>$d = 1$: Không đổi theo trục x.</li>
+                            <li>$e = -1$: Xiên xuống dưới.</li>
+                            <li>$f = 1.5$: Giãn 1.5 lần theo trục y.</li>
+                            <li>$u_2 = -0.5, v_2 = 0.5$: Tịnh tiến 0.5 đơn vị sang trái và 0.5 đơn vị lên trên.</li>
+                        </ul>
+                    </div>
+                    <div class="p-4 border-l-4 border-yellow-500 bg-yellow-50 rounded-r-lg">
+                        <h4 class="font-semibold text-yellow-800 mb-2">Định thức và Diện tích</h4>
+                        <p class="text-gray-700">
+                            Định thức của ma trận cho biết tỉ lệ thay đổi diện tích:
+                            $$ \det(M_1) = a \cdot c, \quad \det(M_2) = d \cdot f $$
+                            Diện tích tam giác mới = $|\det(M)| \times$ diện tích tam giác gốc (diện tích gốc = $1/2$). Tịnh tiến không ảnh hưởng đến diện tích.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Slide 4: Kết luận -->
+                <div class="mb-8 p-4 border-l-4 border-blue-500 bg-blue-50 rounded-r-lg">
+                    <h3 class="text-xl font-semibold text-blue-800 mb-2">4. Kết luận</h3>
+                    <ul class="list-disc list-inside text-gray-700 space-y-2">
+                        <li>Ma trận tam giác trên ($M_1$) và dưới ($M_2$) điều khiển co giãn và xiên.</li>
+                        <li>Vector tịnh tiến $(u_1, v_1)$ và $(u_2, v_2)$ dịch chuyển tam giác.</li>
+                        <li>Định thức phản ánh tỉ lệ thay đổi diện tích của tam giác.</li>
+                        <li>Trực quan hóa giúp hiểu rõ tác động của các tham số.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== CỘT PHẢI: TƯƠNG TÁC & ÂM THANH ===== -->
+        <div class="flex flex-col h-full space-y-4">
+            <!-- Trình phát Âm thanh -->
+            <div class="bg-white rounded-lg shadow-lg p-4 sticky top-0 z-10">
+                <h2 class="text-xl font-bold text-gray-800 mb-3">Âm thanh Bài giảng</h2>
+                <audio id="audio-player" src="audio.wav" class="hidden"></audio>
+                
+                <div class="flex items-center space-x-4">
+                    <button id="play-pause-btn" class="bg-blue-500 text-white rounded-full w-12 h-12 flex items-center justify-center text-2xl hover:bg-blue-600 transition-transform transform hover:scale-105">
+                        <svg id="play-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </button>
+                    <div class="flex-grow">
+                        <input type="range" id="progress-bar" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span id="current-time">00:00</span>
+                            <span id="total-time">00:00</span>
+                        </div>
+                    </div>
+                </div>
+                <label class="block mt-3 text-sm font-medium text-gray-700">
+                    Tải lên file âm thanh khác:
+                    <input type="file" id="audio-upload" accept="audio/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                </label>
+            </div>
+
+            <!-- Ứng dụng tương tác -->
+            <div class="flex-grow bg-white rounded-lg shadow-lg p-6 flex flex-col overflow-y-auto">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Trực quan hóa Phép biến đổi và Tịnh tiến</h2>
+                <div class="flex flex-col h-full">
+                    <!-- Khu vực trực quan -->
+                    <div class="w-full bg-gray-100 rounded-lg flex items-center justify-center p-2" style="height: 400%;">
+                        <canvas id="transform-canvas" class="w-full h-full"></canvas>
+                    </div>
+                    <!-- Khu vực điều khiển -->
+                    <div class="mt-4 space-y-4">
+                        <h3 class="font-semibold text-gray-700">Điều chỉnh ma trận $M_1$, $M_2$ và vector tịnh tiến $(u_1, v_1)$, $(u_2, v_2)$</h3>
+                        
+                        <!-- Slider a -->
+                        <div>
+                            <label for="slider_a" class="flex justify-between text-sm font-medium text-gray-700">
+                                <span>Co giãn X ($a$)</span>
+                                <span id="value_a" class="font-bold">1.0</span>
+                            </label>
+                            <input id="slider_a" type="range" min="-2" max="2" value="1" step="0.1" class="w-full h-2 bg-red-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider b -->
+                        <div>
+                           <label for="slider_b" class="flex justify-between text-sm font-medium text-gray-700">
+                               <span>Xiên X ($b$)</span>
+                               <span id="value_b" class="font-bold">0.0</span>
+                           </label>
+                           <input id="slider_b" type="range" min="-2" max="2" value="0" step="0.1" class="w-full h-2 bg-green-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider c -->
+                        <div>
+                           <label for="slider_c" class="flex justify-between text-sm font-medium text-gray-700">
+                               <span>Co giãn Y ($c$)</span>
+                               <span id="value_c" class="font-bold">1.0</span>
+                           </label>
+                           <input id="slider_c" type="range" min="-2" max="2" value="1" step="0.1" class="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider u1 -->
+                        <div>
+                            <label for="slider_u1" class="flex justify-between text-sm font-medium text-gray-700">
+                                <span>Tịnh tiến X ($u_1$)</span>
+                                <span id="value_u1" class="font-bold">0.0</span>
+                            </label>
+                            <input id="slider_u1" type="range" min="-2" max="2" value="0" step="0.1" class="w-full h-2 bg-pink-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider v1 -->
+                        <div>
+                            <label for="slider_v1" class="flex justify-between text-sm font-medium text-gray-700">
+                                <span>Tịnh tiến Y ($v_1$)</span>
+                                <span id="value_v1" class="font-bold">0.0</span>
+                            </label>
+                            <input id="slider_v1" type="range" min="-2" max="2" value="0" step="0.1" class="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider d -->
+                        <div>
+                            <label for="slider_d" class="flex justify-between text-sm font-medium text-gray-700">
+                                <span>Co giãn X ($d$)</span>
+                                <span id="value_d" class="font-bold">1.0</span>
+                            </label>
+                            <input id="slider_d" type="range" min="-2" max="2" value="1" step="0.1" class="w-full h-2 bg-purple-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider e -->
+                        <div>
+                           <label for="slider_e" class="flex justify-between text-sm font-medium text-gray-700">
+                               <span>Xiên Y ($e$)</span>
+                               <span id="value_e" class="font-bold">0.0</span>
+                           </label>
+                           <input id="slider_e" type="range" min="-2" max="2" value="0" step="0.1" class="w-full h-2 bg-orange-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider f -->
+                        <div>
+                           <label for="slider_f" class="flex justify-between text-sm font-medium text-gray-700">
+                               <span>Co giãn Y ($f$)</span>
+                               <span id="value_f" class="font-bold">1.0</span>
+                           </label>
+                           <input id="slider_f" type="range" min="-2" max="2" value="1" step="0.1" class="w-full h-2 bg-teal-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider u2 -->
+                        <div>
+                            <label for="slider_u2" class="flex justify-between text-sm font-medium text-gray-700">
+                                <span>Tịnh tiến X ($u_2$)</span>
+                                <span id="value_u2" class="font-bold">0.0</span>
+                            </label>
+                            <input id="slider_u2" type="range" min="-2" max="2" value="0" step="0.1" class="w-full h-2 bg-pink-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Slider v2 -->
+                        <div>
+                            <label for="slider_v2" class="flex justify-between text-sm font-medium text-gray-700">
+                                <span>Tịnh tiến Y ($v_2$)</span>
+                                <span id="value_v2" class="font-bold">0.0</span>
+                            </label>
+                            <input id="slider_v2" type="range" min="-2" max="2" value="0" step="0.1" class="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <button id="reset-btn" class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors duration-300">
+                            Reset
+                        </button>
+
+                        <!-- Khu vực hiển thị kết quả -->
+                        <div class="mt-4 p-4 bg-gray-50 rounded-lg border">
+                            <h4 class="font-semibold text-gray-800">Kết quả:</h4>
+                            <div class="text-sm mt-2">
+                                <p><b>Ánh xạ $f_1$:</b></p>
+                                <div id="matrix1-display" class="font-mono text-center text-lg p-2 bg-white rounded"></div>
+                                <p class="mt-2"><b>Định thức $M_1$:</b> <span id="determinant1-display" class="font-bold">1.00</span></p>
+                                <p><b>Vector tịnh tiến $(u_1, v_1)$:</b> <span id="vector1-display" class="font-bold">[0.00, 0.00]</span></p>
+                                <p class="mt-2"><b>Ánh xạ $f_2$:</b></p>
+                                <div id="matrix2-display" class="font-mono text-center text-lg p-2 bg-white rounded"></div>
+                                <p class="mt-2"><b>Định thức $M_2$:</b> <span id="determinant2-display" class="font-bold">1.00</span></p>
+                                <p><b>Vector tịnh tiến $(u_2, v_2)$:</b> <span id="vector2-display" class="font-bold">[0.00, 0.00]</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // =================================================================
+        // PHẦN 1: LOGIC TRÌNH PHÁT ÂM THANH
+        // =================================================================
+        const audio = document.getElementById('audio-player');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+        const progressBar = document.getElementById('progress-bar');
+        const currentTimeEl = document.getElementById('current-time');
+        const totalTimeEl = document.getElementById('total-time');
+        const audioUpload = document.getElementById('audio-upload');
+
+        function togglePlayPause() {
+            if (audio.paused) {
+                audio.play();
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+            } else {
+                audio.pause();
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+            }
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateProgress() {
+            progressBar.value = (audio.currentTime / audio.duration) * 100 || 0;
+            currentTimeEl.textContent = formatTime(audio.currentTime);
+        }
+
+        function setAudioTime() {
+            audio.currentTime = (progressBar.value / 100) * audio.duration;
+        }
+
+        audio.addEventListener('loadedmetadata', () => {
+            totalTimeEl.textContent = formatTime(audio.duration);
+        });
+
+        audio.addEventListener('timeupdate', updateProgress);
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        progressBar.addEventListener('input', setAudioTime);
+        
+        audioUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                audio.src = fileURL;
+                audio.load();
+                audio.oncanplaythrough = () => {
+                    togglePlayPause();
+                    if(audio.paused) togglePlayPause();
+                };
+            }
+        });
+
+        // =================================================================
+        // PHẦN 2: LOGIC ỨNG DỤNG TƯƠNG TÁC CANVAS
+        // =================================================================
+        const canvas = document.getElementById('transform-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const sliderA = document.getElementById('slider_a');
+        const sliderB = document.getElementById('slider_b');
+        const sliderC = document.getElementById('slider_c');
+        const sliderD = document.getElementById('slider_d');
+        const sliderE = document.getElementById('slider_e');
+        const sliderF = document.getElementById('slider_f');
+        const sliderU1 = document.getElementById('slider_u1');
+        const sliderV1 = document.getElementById('slider_v1');
+        const sliderU2 = document.getElementById('slider_u2');
+        const sliderV2 = document.getElementById('slider_v2');
+        const valueA = document.getElementById('value_a');
+        const valueB = document.getElementById('value_b');
+        const valueC = document.getElementById('value_c');
+        const valueD = document.getElementById('value_d');
+        const valueE = document.getElementById('value_e');
+        const valueF = document.getElementById('value_f');
+        const valueU1 = document.getElementById('value_u1');
+        const valueV1 = document.getElementById('value_v1');
+        const valueU2 = document.getElementById('value_u2');
+        const valueV2 = document.getElementById('value_v2');
+        const matrix1Display = document.getElementById('matrix1-display');
+        const matrix2Display = document.getElementById('matrix2-display');
+        const determinant1Display = document.getElementById('determinant1-display');
+        const determinant2Display = document.getElementById('determinant2-display');
+        const vector1Display = document.getElementById('vector1-display');
+        const vector2Display = document.getElementById('vector2-display');
+        const resetBtn = document.getElementById('reset-btn');
+
+        let scale = 50;
+        let originX, originY;
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            originX = canvas.width / 2;
+            originY = canvas.height / 2;
+            scale = Math.min(canvas.width, canvas.height) / 5;
+            draw();
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let x = -10; x <= 10; x++) {
+                ctx.beginPath();
+                ctx.moveTo(originX + x * scale, 0);
+                ctx.lineTo(originX + x * scale, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = -10; y <= 10; y++) {
+                ctx.beginPath();
+                ctx.moveTo(0, originY + y * scale);
+                ctx.lineTo(canvas.width, originY + y * scale);
+                ctx.stroke();
+            }
+
+            ctx.strokeStyle = '#9e9e9e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, originY);
+            ctx.lineTo(canvas.width, originY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(originX, 0);
+            ctx.lineTo(originX, canvas.height);
+            ctx.stroke();
+        }
+
+        function drawShape(points, color, fillColor) {
+            ctx.beginPath();
+            ctx.moveTo(originX + points[0][0] * scale, originY - points[0][1] * scale);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(originX + points[i][0] * scale, originY - points[i][1] * scale);
+            }
+            ctx.closePath();
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+
+            const a = parseFloat(sliderA.value);
+            const b = parseFloat(sliderB.value);
+            const c = parseFloat(sliderC.value);
+            const d = parseFloat(sliderD.value);
+            const e = parseFloat(sliderE.value);
+            const f = parseFloat(sliderF.value);
+            const u1 = parseFloat(sliderU1.value);
+            const v1 = parseFloat(sliderV1.value);
+            const u2 = parseFloat(sliderU2.value);
+            const v2 = parseFloat(sliderV2.value);
+
+            // Cập nhật hiển thị giá trị
+            valueA.textContent = a.toFixed(1);
+            valueB.textContent = b.toFixed(1);
+            valueC.textContent = c.toFixed(1);
+            valueD.textContent = d.toFixed(1);
+            valueE.textContent = e.toFixed(1);
+            valueF.textContent = f.toFixed(1);
+            valueU1.textContent = u1.toFixed(1);
+            valueV1.textContent = v1.toFixed(1);
+            valueU2.textContent = u2.toFixed(1);
+            valueV2.textContent = v2.toFixed(1);
+
+            matrix1Display.innerHTML = `
+                <table class="w-full">
+                    <tr>
+                        <td class="text-red-600">${a.toFixed(2)}</td>
+                        <td class="text-green-600">${b.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td>0.00</td>
+                        <td class="text-blue-600">${c.toFixed(2)}</td>
+                    </tr>
+                </table>
+            `;
+            matrix2Display.innerHTML = `
+                <table class="w-full">
+                    <tr>
+                        <td class="text-purple-600">${d.toFixed(2)}</td>
+                        <td>0.00</td>
+                    </tr>
+                    <tr>
+                        <td class="text-orange-600">${e.toFixed(2)}</td>
+                        <td class="text-teal-600">${f.toFixed(2)}</td>
+                    </tr>
+                </table>
+            `;
+            vector1Display.textContent = `[${u1.toFixed(2)}, ${v1.toFixed(2)}]`;
+            vector2Display.textContent = `[${u2.toFixed(2)}, ${v2.toFixed(2)}]`;
+            const determinant1 = a * c;
+            const determinant2 = d * f;
+            determinant1Display.textContent = determinant1.toFixed(2);
+            determinant2Display.textContent = determinant2.toFixed(2);
+
+            const originalTriangle = [
+                [0, 0], [1, 0], [0, 1]
+            ];
+
+            const transformedTriangle1 = originalTriangle.map(p => {
+                const x = p[0];
+                const y = p[1];
+                const newX = a * x + b * y + u1;
+                const newY = c * y + v1;
+                return [newX, newY];
+            });
+
+            const transformedTriangle2 = originalTriangle.map(p => {
+                const x = p[0];
+                const y = p[1];
+                const newX = d * x + u2;
+                const newY = e * x + f * y + v2;
+                return [newX, newY];
+            });
+
+            drawShape(originalTriangle, 'rgba(0, 123, 255, 1)', 'rgba(0, 123, 255, 0.3)');
+            drawShape(transformedTriangle1, 'rgba(220, 53, 69, 1)', 'rgba(220, 53, 69, 0.3)');
+            drawShape(transformedTriangle2, 'rgba(40, 167, 69, 1)', 'rgba(40, 167, 69, 0.3)');
+        }
+        
+        function resetVisualization() {
+            sliderA.value = 1;
+            sliderB.value = 0;
+            sliderC.value = 1;
+            sliderD.value = 1;
+            sliderE.value = 0;
+            sliderF.value = 1;
+            sliderU1.value = 0;
+            sliderV1.value = 0;
+            sliderU2.value = 0;
+            sliderV2.value = 0;
+            draw();
+        }
+
+        [sliderA, sliderB, sliderC, sliderD, sliderE, sliderF, sliderU1, sliderV1, sliderU2, sliderV2].forEach(slider => {
+            slider.addEventListener('input', draw);
+        });
+        resetBtn.addEventListener('click', resetVisualization);
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        resetVisualization();
+
+    });
+    </script>
+</body>
+</html>
