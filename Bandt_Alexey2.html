@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Mô phỏng Định lý 2: Ba trạng thái khả vi</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+        .controls {
+            width: 350px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #ffffff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="range"] { width: 100%; }
+        .value-display { font-family: "Courier New", Courier, monospace; font-size: 1.1em; color: #333; }
+        #status, #mode-info {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid;
+        }
+        #mode-info { background-color: #e7f3fe; border-color: #2e6da4; color: #31708f; font-size: 0.9em; }
+        
+        /* Trạng thái khả vi */
+        .differentiable-c1 { background-color: #e0f8e0; border-color: #5cb85c; color: #3c763d; }
+        .differentiable-ae { background-color: #fcf8e3; border-color: #f0ad4e; color: #8a6d3b; }
+        .not-differentiable { background-color: #f8e0e0; border-color: #d9534f; color: #a94442; }
+
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1, h2 { margin-top: 0; color: #333; }
+        .param-info { font-size: 0.9em; margin-bottom: 15px; }
+        .red-text { color: #c9302c; font-weight: bold; }
+        .green-text { color: #449d44; font-weight: bold; }
+        #c1-check { font-size: 0.9em; font-family: "Courier New", monospace; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h1>Bảng điều khiển</h1>
+        <div class="param-info">
+            <b>f₁(J)</b> (<span class="red-text">đỏ</span>), <b>f₂(J)</b> (<span class="green-text">xanh</span>)
+        </div>
+        
+        <div class="control-group">
+            <label for="lambda1">λ₁: <span id="lambda1_val" class="value-display"></span></label>
+            <input type="range" id="lambda1" min="0.01" max="0.99" step="0.005" value="0.6">
+        </div>
+        <div class="control-group">
+            <label for="nu1">ν₁: <span id="nu1_val" class="value-display"></span></label>
+            <input type="range" id="nu1" min="0.01" max="0.99" step="0.005" value="0.4">
+        </div>
+        <div class="control-group">
+            <label for="lambda2">λ₂: <span id="lambda2_val" class="value-display"></span></label>
+            <input type="range" id="lambda2" min="0.01" max="0.99" step="0.005" value="0.5">
+        </div>
+        <div class="control-group">
+            <label for="nu2">ν₂: <span id="nu2_val" class="value-display"></span></label>
+            <input type="range" id="nu2" min="0.01" max="0.99" step="0.005" value="0.3">
+        </div>
+
+        <div class="control-group">
+            <label for="iterations">Số lần lặp (độ sâu): <span id="iterations_val" class="value-display"></span></label>
+            <input type="range" id="iterations" min="0" max="12" step="1" value="8">
+        </div>
+        
+        <div id="points-control" class="control-group" style="display: none;">
+            <label for="points">Mật độ điểm: <span id="points_val" class="value-display"></span></label>
+            <input type="range" id="points" min="1000" max="200000" step="1000" value="100000">
+        </div>
+
+        <hr>
+        <h2>Phân tích khả vi</h2>
+        <div>α = ν₂ + λ₁ - 1 = <span id="alpha_val" class="value-display"></span></div>
+        <div>β = ν₁ + λ₂ - 1 = <span id="beta_val" class="value-display"></span></div>
+        <div id="c1-check">
+            <label>Điều kiện C¹ (ν₁ν₂ ≈ αβ):</label>
+            <span id="c1-check-val"></span>
+        </div>
+        <div id="status"></div>
+        <div id="mode-info"></div>
+    </div>
+
+    <div>
+        <canvas id="fractalCanvas" width="600" height="600"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const size = canvas.width;
+        const ITERATION_THRESHOLD = 9; 
+        const C1_EPSILON = 0.002; // Ngưỡng dung sai cho điều kiện C¹
+
+        // DOM elements
+        const sliders = { /* ... */ }; // (Code không đổi, ẩn đi cho gọn)
+        const displays = { /* ... */ };
+        const pointsControl = document.getElementById('points-control');
+        let params = {};
+        
+        // Gán các phần tử DOM
+        const domIds = ['lambda1', 'nu1', 'lambda2', 'nu2', 'iterations', 'points'];
+        domIds.forEach(id => {
+            sliders[id] = document.getElementById(id);
+            displays[id] = document.getElementById(id + '_val');
+        });
+        displays.alpha = document.getElementById('alpha_val');
+        displays.beta = document.getElementById('beta_val');
+        displays.c1_check = document.getElementById('c1-check-val');
+        displays.status = document.getElementById('status');
+        displays.modeInfo = document.getElementById('mode-info');
+
+
+        function draw() {
+            updateParams();
+            clearCanvas();
+            
+            if (params.iterations <= ITERATION_THRESHOLD) {
+                drawIterativeFractal_Polygons();
+            } else {
+                drawIterativeFractal_ChaosGame();
+            }
+            
+            drawGuideLines();
+            drawAnnotations();
+        }
+        
+        function updateParams() {
+            // Đọc giá trị
+            for (const key in sliders) {
+                params[key] = parseFloat(sliders[key].value);
+            }
+            params.alpha = params.nu2 + params.lambda1 - 1;
+            params.beta = params.nu1 + params.lambda2 - 1;
+
+            // Hiển thị giá trị
+            for (const key in sliders) {
+                displays[key].textContent = sliders[key].value;
+            }
+            displays.alpha.textContent = params.alpha.toFixed(4);
+            displays.beta.textContent = params.beta.toFixed(4);
+
+            // Phân tích 3 trạng thái khả vi
+            const v1v2 = params.nu1 * params.nu2;
+            const alpha_beta = params.alpha * params.beta;
+            displays.c1_check.innerHTML = `ν₁ν₂=${v1v2.toFixed(4)}, αβ=${alpha_beta.toFixed(4)}`;
+
+            if (params.alpha >= 0 || params.beta >= 0) {
+                displays.status.textContent = 'Không khả vi trên tập đáng kể';
+                displays.status.className = 'not-differentiable';
+            } else { // Điều kiện α < 0 và β < 0 được thỏa mãn
+                if (Math.abs(v1v2 - alpha_beta) < C1_EPSILON) {
+                    displays.status.textContent = 'Khả vi liên tục (C¹)';
+                    displays.status.className = 'differentiable-c1';
+                } else {
+                    displays.status.textContent = 'Khả vi hầu khắp nơi';
+                    displays.status.className = 'differentiable-ae';
+                }
+            }
+
+            // Cập nhật chế độ vẽ
+            if (params.iterations <= ITERATION_THRESHOLD) {
+                pointsControl.style.display = 'none';
+                displays.modeInfo.textContent = 'Chế độ: Vẽ đa giác (các bước xây dựng)';
+            } else {
+                pointsControl.style.display = 'block';
+                displays.modeInfo.textContent = 'Chế độ: Vẽ điểm hội tụ (đường cong giới hạn)';
+            }
+        }
+        
+        function clearCanvas() { ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, size, size); }
+        function mapCoords(p) { const margin = 0.1 * size, drawSize = size * 0.8; return { x: p.x * drawSize + margin, y: size - (p.y * drawSize + margin) }; }
+        const f1 = p => ({ x: params.lambda1 * p.x + params.alpha * p.y + (1 - params.lambda1), y: params.nu1 * p.y });
+        const f2 = p => ({ x: params.nu2 * p.x, y: params.beta * p.x + params.lambda2 * p.y + (1 - params.lambda2) });
+        
+        // Phương pháp vẽ đa giác
+        function drawIterativeFractal_Polygons() {
+            const initialTriangle = [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}];
+            if (params.iterations === 0) { ctx.fillStyle = 'rgba(20, 20, 80, 0.8)'; drawPolygon(initialTriangle); return; }
+            let red_polys = [initialTriangle.map(f1)], green_polys = [initialTriangle.map(f2)];
+            for (let i = 1; i < params.iterations; i++) {
+                let next_red = [], next_green = [];
+                [...red_polys, ...green_polys].forEach(poly => {
+                    next_red.push(poly.map(f1));
+                    next_green.push(poly.map(f2));
+                });
+                red_polys = next_red; green_polys = next_green;
+            }
+            ctx.fillStyle = 'rgba(217, 83, 79, 0.7)'; red_polys.forEach(drawPolygon);
+            ctx.fillStyle = 'rgba(92, 184, 92, 0.7)'; green_polys.forEach(drawPolygon);
+        }
+
+        // Phương pháp vẽ điểm hội tụ
+        function drawIterativeFractal_ChaosGame() {
+            let p = { x: Math.random(), y: Math.random() };
+            const red = 'rgba(201, 48, 44, 0.8)', green = 'rgba(68, 157, 68, 0.8)';
+            for (let i = 0; i < params.points; i++) {
+                const choice_is_f1 = Math.random() < 0.5;
+                p = choice_is_f1 ? f1(p) : f2(p);
+                if (i > 20) {
+                    ctx.fillStyle = choice_is_f1 ? red : green;
+                    const c = mapCoords(p); ctx.fillRect(c.x, c.y, 1, 1);
+                }
+            }
+        }
+        
+        // Các hàm phụ trợ
+        function drawPolygon(poly) { const m = poly.map(mapCoords); ctx.beginPath(); ctx.moveTo(m[0].x, m[0].y); for (let i = 1; i < m.length; i++) ctx.lineTo(m[i].x, m[i].y); ctx.closePath(); ctx.fill(); }
+        function drawGuideLines() {
+            const T = [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}];
+            ctx.strokeStyle = 'blue'; ctx.lineWidth = 1;
+            const drawOutline = poly => { const m = poly.map(mapCoords); ctx.beginPath(); ctx.moveTo(m[0].x, m[0].y); for (let i=1; i<m.length; i++) ctx.lineTo(m[i].x, m[i].y); ctx.closePath(); ctx.stroke(); };
+            drawOutline(T); drawOutline(T.map(f1)); drawOutline(T.map(f2));
+        }
+        function drawAnnotations() {
+            ctx.fillStyle = 'black'; ctx.font = '16px Arial';
+            const annotations = {
+                'e₁': { p: {x: 1, y: 0}, align: 'left', baseline: 'top', dx: 5, dy: 5 },
+                'e₂': { p: {x: 0, y: 1}, align: 'right', baseline: 'bottom', dx: -5, dy: -5 },
+                'z':  { p: {x: params.nu2, y: params.nu1}, align: 'left', baseline: 'bottom', dx: 5, dy: -5 },
+                '0':  { p: {x: 0, y: 0}, align: 'right', baseline: 'top', dx: -5, dy: 5 },
+                '1-λ₁': { p: {x: 1 - params.lambda1, y: 0}, align: 'center', baseline: 'top', dx: 0, dy: 5 },
+                'ν₂':   { p: {x: params.nu2, y: 0}, align: 'center', baseline: 'top', dx: 0, dy: 5 },
+                '1-λ₂': { p: {x: 0, y: 1 - params.lambda2}, align: 'right', baseline: 'middle', dx: -5, dy: 0 },
+                'ν₁':   { p: {x: 0, y: params.nu1}, align: 'right', baseline: 'middle', dx: -5, dy: 0 }
+            };
+            for (const key in annotations) { const a = annotations[key], c = mapCoords(a.p); ctx.textAlign = a.align; ctx.textBaseline = a.baseline; ctx.fillText(key, c.x + a.dx, c.y + a.dy); }
+        }
+        
+        for (const key in sliders) { sliders[key].addEventListener('input', draw); }
+        draw();
+    </script>
+
+</body>
+</html>
