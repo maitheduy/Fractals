@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Attractor 3D & Hai ánh xạ affine chuẩn Latex</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$','$$'], ['\\[','\\]']]
+        }
+      };
+    </script>
+    <script id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f6faff; margin:0; }
+        .main-wrap { 
+            max-width: 1400px; 
+            margin: 40px auto; 
+            display: flex; 
+            gap: 40px; 
+            align-items: flex-start; 
+            flex-wrap: wrap;
+        }
+        .latex-col {
+            background: #fff; 
+            border-radius: 1.2rem; 
+            box-shadow: 0 4px 16px #0001; 
+            padding: 2.5rem 2.5rem 2rem 2.5rem;
+            font-size: 1.18rem;
+            flex: 1 1 420px;
+            min-width: 340px;
+        }
+        #plot3d {
+            min-width: 420px; 
+            width: 640px; 
+            height: 680px; 
+            background: #f4f6f8;
+            border-radius: 1.1rem;
+            box-shadow: 0 4px 16px #0001;
+            flex: 1 1 450px;
+            margin: auto;
+        }
+        @media (max-width: 1200px) {
+            .main-wrap { flex-direction: column; align-items: stretch; }
+            #plot3d { width: 100%; min-width: 320px; }
+        }
+        @media (max-width: 600px) {
+            .main-wrap { gap: 16px; }
+            .latex-col { padding: 1rem; font-size: 1.02rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="main-wrap">
+    <div class="latex-col">
+        <h2 style="color:#2257a6; font-size:1.5rem; margin-bottom:0.5em">
+            Hai ánh xạ co affine ($f_1, f_2$):
+        </h2>
+        <div>
+        $$f_1\left(\begin{bmatrix}x\\y\\z\end{bmatrix}\right) =
+        \begin{bmatrix}
+            0 & 0.5 & 0 \\\\
+            1 & 0 & 0 \\\\
+            0 & 0.5 & a
+        \end{bmatrix}
+        \begin{bmatrix}x\\y\\z\end{bmatrix}
+        $$
+        <div style="color:green; margin-bottom:0.7em;">(Với $a=0.5$, điểm tô màu <b>xanh lá</b>)</div>
+        $$f_2\left(\begin{bmatrix}x\\y\\z\end{bmatrix}\right) =
+        \begin{bmatrix}
+            0 & -0.5 & 0 \\\\
+            1 & 0 & 0 \\\\
+            0 & 0.5 & a
+        \end{bmatrix}
+        \begin{bmatrix}x\\y\\z\end{bmatrix}
+        + \begin{bmatrix}1\\0\\0\end{bmatrix}
+        $$
+        <div style="color:#d32f2f;">(Điểm tô màu <b>đỏ</b>)</div>
+        </div>
+        <div style="margin-top:2.5em; color:#444;">
+            <b>Cách đọc:</b>
+            <ul style="margin:0 0 0 1.2em;">
+                <li>$f_1$ và $f_2$ là hai ánh xạ affine tác động lên điểm $(x, y, z)$.</li>
+                <li>$f_1$ không có tịnh tiến, $f_2$ có tịnh tiến $+1$ theo trục $x$.</li>
+                <li>Attractor 3D bên phải là quỹ tích điểm dưới hai hàm co này qua phương pháp \"chaos game\".</li>
+            </ul>
+        </div>
+    </div>
+    <div>
+        <div id="plot3d"></div>
+    </div>
+</div>
+
+<script>
+const n_points = 50000;
+const a = 0.5;
+
+// Ma trận affine
+const M1 = [
+    [0.0, 0.5, 0.0],
+    [1.0, 0.0, 0.0],
+    [0.0, 0.5, a]
+];
+const M2 = [
+    [0.0, -0.5, 0.0],
+    [1.0,  0.0, 0.0],
+    [0.0,  0.5, a]
+];
+const T2 = [1.0, 0.0, 0.0];
+
+// Hàm nhân ma trận 3x3 với vector 3x1
+function matVecMul(M, X) {
+    return [
+        M[0][0]*X[0] + M[0][1]*X[1] + M[0][2]*X[2],
+        M[1][0]*X[0] + M[1][1]*X[1] + M[1][2]*X[2],
+        M[2][0]*X[0] + M[2][1]*X[1] + M[2][2]*X[2]
+    ];
+}
+
+// Khởi tạo
+let X = [0.5, 0.5, 0.5];
+let xf1 = [], yf1 = [], zf1 = [];
+let xf2 = [], yf2 = [], zf2 = [];
+
+for (let i = 0; i < n_points; ++i) {
+    if (Math.random() < 0.5) {
+        X = matVecMul(M1, X);
+        xf1.push(X[0]); yf1.push(X[1]); zf1.push(X[2]);
+    } else {
+        let tmp = matVecMul(M2, X);
+        X = [tmp[0] + T2[0], tmp[1] + T2[1], tmp[2] + T2[2]];
+        xf2.push(X[0]); yf2.push(X[1]); zf2.push(X[2]);
+    }
+}
+
+// Vẽ bằng Plotly.js
+const trace1 = {
+    x: xf1, y: yf1, z: zf1,
+    mode: 'markers',
+    type: 'scatter3d',
+    name: 'f₁ (xanh lá)',
+    marker: {size: 1.5, color: 'green'}
+};
+const trace2 = {
+    x: xf2, y: yf2, z: zf2,
+    mode: 'markers',
+    type: 'scatter3d',
+    name: 'f₂ (đỏ)',
+    marker: {size: 1.5, color: 'red'}
+};
+const layout = {
+    title: 'Attractor 3D từ f₁ và f₂ với a = 0.5',
+    scene: {
+        xaxis: {title: 'X'},
+        yaxis: {title: 'Y'},
+        zaxis: {title: 'Z'},
+        aspectmode: 'data'
+    },
+    width: 640,
+    height: 680,
+    margin: {l:0, r:0, b:0, t:50}
+};
+
+Plotly.newPlot('plot3d', [trace1, trace2], layout);
+</script>
+</body>
+</html>
