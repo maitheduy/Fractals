@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Attractor 3D với 2 hàm co affine động</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.2.0/math.min.js"></script>
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$','$$'], ['\\[','\\]']] }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            background: #f6faff; 
+            margin: 0;
+            padding: 20px;
+        }
+        .main-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .controls {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .plot-container {
+            flex: 2;
+            min-width: 400px;
+            height: 600px;
+            background: #f4f6f8;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .matrix-control {
+            margin-bottom: 20px;
+        }
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .param-control {
+            display: flex;
+            flex-direction: column;
+        }
+        .param-control input[type="range"] {
+            width: 100%;
+        }
+        .param-control input[type="number"] {
+            width: 70px;
+            margin-top: 5px;
+            padding: 5px;
+        }
+        .vector-control {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        h2 {
+            color: #2257a6;
+            margin-top: 0;
+        }
+        .formula-box {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #2257a6;
+        }
+    </style>
+</head>
+<body>
+<div class="main-container">
+    <div class="controls">
+        <h2>Điều khiển tham số</h2>
+        
+        <div class="matrix-control">
+            <h3>Ma trận M1</h3>
+            <div class="matrix-grid">
+                <div class="param-control"><input type="range" id="slider0" min="-2" max="2" step="0.01" value="0"><input type="number" id="num0" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider1" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num1" step="0.01" value="0.5"></div>
+                <div class="param-control"><input type="range" id="slider2" min="-2" max="2" step="0.01" value="0"><input type="number" id="num2" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider3" min="-2" max="2" step="0.01" value="1"><input type="number" id="num3" step="0.01" value="1"></div>
+                <div class="param-control"><input type="range" id="slider4" min="-2" max="2" step="0.01" value="0"><input type="number" id="num4" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider5" min="-2" max="2" step="0.01" value="0"><input type="number" id="num5" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider6" min="-2" max="2" step="0.01" value="0"><input type="number" id="num6" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider7" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num7" step="0.01" value="0.5"></div>
+                <div class="param-control"><input type="range" id="slider8" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num8" step="0.01" value="0.5"></div>
+            </div>
+            
+            <h3>Tịnh tiến T1</h3>
+            <div class="vector-control">
+                <div class="param-control"><label>X: </label><input type="range" id="slider9" min="-2" max="2" step="0.01" value="0"><input type="number" id="num9" step="0.01" value="0"></div>
+                <div class="param-control"><label>Y: </label><input type="range" id="slider10" min="-2" max="2" step="0.01" value="0"><input type="number" id="num10" step="0.01" value="0"></div>
+                <div class="param-control"><label>Z: </label><input type="range" id="slider11" min="-2" max="2" step="0.01" value="0"><input type="number" id="num11" step="0.01" value="0"></div>
+            </div>
+        </div>
+        
+        <div class="matrix-control">
+            <h3>Ma trận M2</h3>
+            <div class="matrix-grid">
+                <div class="param-control"><input type="range" id="slider12" min="-2" max="2" step="0.01" value="0"><input type="number" id="num12" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider13" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num13" step="0.01" value="0.5"></div>
+                <div class="param-control"><input type="range" id="slider14" min="-2" max="2" step="0.01" value="0"><input type="number" id="num14" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider15" min="-2" max="2" step="0.01" value="1"><input type="number" id="num15" step="0.01" value="1"></div>
+                <div class="param-control"><input type="range" id="slider16" min="-2" max="2" step="0.01" value="0"><input type="number" id="num16" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider17" min="-2" max="2" step="0.01" value="0"><input type="number" id="num17" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider18" min="-2" max="2" step="0.01" value="0"><input type="number" id="num18" step="0.01" value="0"></div>
+                <div class="param-control"><input type="range" id="slider19" min="-2" max="2" step="0.01" value="-0.5"><input type="number" id="num19" step="0.01" value="-0.5"></div>
+                <div class="param-control"><input type="range" id="slider20" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num20" step="0.01" value="0.5"></div>
+            </div>
+            
+            <h3>Tịnh tiến T2</h3>
+            <div class="vector-control">
+                <div class="param-control"><label>X: </label><input type="range" id="slider21" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num21" step="0.01" value="0.5"></div>
+                <div class="param-control"><label>Y: </label><input type="range" id="slider22" min="-2" max="2" step="0.01" value="0"><input type="number" id="num22" step="0.01" value="0"></div>
+                <div class="param-control"><label>Z: </label><input type="range" id="slider23" min="-2" max="2" step="0.01" value="0.5"><input type="number" id="num23" step="0.01" value="0.5"></div>
+            </div>
+        </div>
+        
+        <div class="formula-box">
+            <h3>Công thức hiện tại:</h3>
+            <div id="current-formulas"></div>
+        </div>
+    </div>
+    
+    <div class="plot-container" id="plot3d"></div>
+</div>
+
+<script>
+// Biến toàn cục lưu đối tượng đồ thị
+let plot = null;
+
+// Hàm khởi tạo sự kiện
+function initEventListeners() {
+    for (let i = 0; i < 24; i++) {
+        const slider = document.getElementById(`slider${i}`);
+        const numberInput = document.getElementById(`num${i}`);
+        
+        slider.addEventListener('input', function() {
+            numberInput.value = this.value;
+            updateAttractor();
+        });
+        
+        numberInput.addEventListener('change', function() {
+            slider.value = this.value;
+            updateAttractor();
+        });
+    }
+}
+
+// Hàm cập nhật công thức toán học
+function updateFormulas(M1, T1, M2, T2) {
+    const formulas = `$$
+    f_1\\left(\\begin{bmatrix}x\\\\y\\\\z\\end{bmatrix}\\right) =
+    \\begin{bmatrix}
+        ${M1[0][0].toFixed(2)} & ${M1[0][1].toFixed(2)} & ${M1[0][2].toFixed(2)} \\\\
+        ${M1[1][0].toFixed(2)} & ${M1[1][1].toFixed(2)} & ${M1[1][2].toFixed(2)} \\\\
+        ${M1[2][0].toFixed(2)} & ${M1[2][1].toFixed(2)} & ${M1[2][2].toFixed(2)}
+    \\end{bmatrix}
+    \\begin{bmatrix}x\\\\y\\\\z\\end{bmatrix}
+    ${T1.some(v => v !== 0) ? `+ \\begin{bmatrix}${T1[0].toFixed(2)}\\\\${T1[1].toFixed(2)}\\\\${T1[2].toFixed(2)}\\end{bmatrix}` : ''}
+    $$
+    $$
+    f_2\\left(\\begin{bmatrix}x\\\\y\\\\z\\end{bmatrix}\\right) =
+    \\begin{bmatrix}
+        ${M2[0][0].toFixed(2)} & ${M2[0][1].toFixed(2)} & ${M2[0][2].toFixed(2)} \\\\
+        ${M2[1][0].toFixed(2)} & ${M2[1][1].toFixed(2)} & ${M2[1][2].toFixed(2)} \\\\
+        ${M2[2][0].toFixed(2)} & ${M2[2][1].toFixed(2)} & ${M2[2][2].toFixed(2)}
+    \\end{bmatrix}
+    \\begin{bmatrix}x\\\\y\\\\z\\end{bmatrix}
+    ${T2.some(v => v !== 0) ? `+ \\begin{bmatrix}${T2[0].toFixed(2)}\\\\${T2[1].toFixed(2)}\\\\${T2[2].toFixed(2)}\\end{bmatrix}` : ''}
+    $$`;
+    
+    document.getElementById('current-formulas').innerHTML = formulas;
+    MathJax.typesetPromise();
+}
+
+// Hàm tính toán attractor
+function calculateAttractor(M1, T1, M2, T2, n_points = 10000) {
+    let X = [0.1, 0.1, 0.1];
+    let xf1 = [], yf1 = [], zf1 = [];
+    let xf2 = [], yf2 = [], zf2 = [];
+    
+    for (let i = 0; i < n_points; i++) {
+        if (Math.random() < 0.5) {
+            X = math.add(math.multiply(M1, X), T1);
+            xf1.push(X[0]); yf1.push(X[1]); zf1.push(X[2]);
+        } else {
+            X = math.add(math.multiply(M2, X), T2);
+            xf2.push(X[0]); yf2.push(X[1]); zf2.push(X[2]);
+        }
+    }
+    
+    return {
+        f1: {x: xf1, y: yf1, z: zf1},
+        f2: {x: xf2, y: yf2, z: zf2}
+    };
+}
+
+// Hàm cập nhật đồ thị
+function updatePlot(f1Points, f2Points) {
+    const trace1 = {
+        x: f1Points.x, y: f1Points.y, z: f1Points.z,
+        mode: 'markers',
+        type: 'scatter3d',
+        name: 'f₁ (xanh lá)',
+        marker: {size: 1.5, color: 'green', opacity: 0.7}
+    };
+    
+    const trace2 = {
+        x: f2Points.x, y: f2Points.y, z: f2Points.z,
+        mode: 'markers',
+        type: 'scatter3d',
+        name: 'f₂ (đỏ)',
+        marker: {size: 1.5, color: 'red', opacity: 0.7}
+    };
+    
+    const layout = {
+        title: 'Attractor 3D',
+        margin: {l: 0, r: 0, b: 0, t: 30},
+        scene: {
+            xaxis: {title: 'X'},
+            yaxis: {title: 'Y'},
+            zaxis: {title: 'Z'},
+            aspectmode: 'data'
+        },
+        showlegend: true
+    };
+    
+    if (plot) {
+        Plotly.react('plot3d', [trace1, trace2], layout);
+    } else {
+        plot = Plotly.newPlot('plot3d', [trace1, trace2], layout);
+    }
+}
+
+// Hàm chính cập nhật attractor
+function updateAttractor() {
+    // Lấy giá trị từ các slider
+    const vals = Array.from({length: 24}, (_, i) => 
+        parseFloat(document.getElementById(`slider${i}`).value)
+    );
+    
+    // Tách thành các ma trận và vector
+    const M1 = [vals.slice(0,3), vals.slice(3,6), vals.slice(6,9)];
+    const T1 = vals.slice(9,12);
+    const M2 = [vals.slice(12,15), vals.slice(15,18), vals.slice(18,21)];
+    const T2 = vals.slice(21,24);
+    
+    // Cập nhật công thức
+    updateFormulas(M1, T1, M2, T2);
+    
+    // Tính toán điểm attractor
+    const points = calculateAttractor(M1, T1, M2, T2, 8000);
+    
+    // Cập nhật đồ thị
+    updatePlot(points.f1, points.f2);
+}
+
+// Khởi tạo chương trình
+function init() {
+    initEventListeners();
+    updateAttractor(); // Chạy lần đầu tiên
+}
+
+// Chạy khi trang web đã tải xong
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
