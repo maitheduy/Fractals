@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor và Hình chiếu</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .main-container {
+            width: 100%;
+            max-width: 1100px; /* Tăng chiều rộng tối đa */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            color: #333; text-align: center; margin: 0;
+        }
+        h2 {
+            font-size: 1em;
+            text-align: center;
+            color: #444;
+            margin: 5px 0 10px 0;
+            font-weight: normal;
+        }
+
+        #controls {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px 20px; /* Thêm khoảng cách cột */
+            align-items: center;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%;
+            box-sizing: border-box; 
+        }
+
+        label {
+            justify-self: end; font-weight: bold; color: #555;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 0;
+        }
+        span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            min-width: 60px; /* Đảm bảo các giá trị căn chỉnh đẹp */
+        }
+        
+        /* *** THÊM VÀO: Container cho cả hai canvas *** */
+        .canvas-super-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        
+        /* *** THÊM VÀO: Wrapper cho mỗi canvas để thêm viền và tiêu đề *** */
+        .canvas-wrapper {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <h1>Attractor IFS và Hình chiếu Vuông góc</h1>
+
+        <div id="controls">
+            <!-- Slider lambda -->
+            <label for="lambda-slider">λ (lambda):</label>
+            <input type="range" id="lambda-slider" min="0" max="0.618" step="0.001" value="0.5">
+            <span id="lambda-value">0.500</span>
+
+            <!-- *** THÊM VÀO: Slider theta *** -->
+            <label for="theta-slider">θ (theta):</label>
+            <input type="range" id="theta-slider" min="0" max="180" step="1" value="0">
+            <span id="theta-value">0 độ</span>
+            
+            <label style="grid-column: 1;">μ (tính toán):</label>
+            <span></span>
+            <span id="mu-value" style="grid-column: 3;">...</span>
+
+            <label style="grid-column: 1;">α (tính toán):</label>
+            <span></span>
+            <span id="alpha-value" style="grid-column: 3;">...</span>
+            
+            <label style="grid-column: 1; color: #0056b3;">Số chiều Hausdorff:</label>
+            <span></span>
+            <span id="hausdorff-dim-value" style="grid-column: 3; color: #0056b3;">...</span>
+        </div>
+        
+        <!-- *** SỬA ĐỔI: Layout hai canvas *** -->
+        <div class="canvas-super-container">
+            <div class="canvas-wrapper">
+                <h2>Attractor IFS</h2>
+                <canvas id="chaosCanvas" width="500" height="500"></canvas>
+            </div>
+            <div class="canvas-wrapper">
+                <h2>Hình chiếu lên đường thẳng y = tan(θ)x</h2>
+                <canvas id="projectionCanvas" width="500" height="500"></canvas>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Canvas gốc
+        const canvas = document.getElementById('chaosCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // *** THÊM VÀO: Canvas mới cho hình chiếu ***
+        const projectionCanvas = document.getElementById('projectionCanvas');
+        const ctxProj = projectionCanvas.getContext('2d');
+
+        // Điều khiển
+        const lambdaSlider = document.getElementById('lambda-slider');
+        const lambdaValueSpan = document.getElementById('lambda-value');
+        const thetaSlider = document.getElementById('theta-slider');
+        const thetaValueSpan = document.getElementById('theta-value');
+        
+        const muValueSpan = document.getElementById('mu-value');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        const hausdorffDimSpan = document.getElementById('hausdorff-dim-value');
+        
+        let x, y;
+        let lambda, mu, alpha, thetaRad; // Thêm thetaRad để lưu góc bằng radian
+        
+        let animationFrameId;
+        
+        // Viewport cho cả hai canvas
+        let viewPort = { minX: 0, rangeX: 1, minY: 0, rangeY: 1 };
+        let projectionBounds = { min: 0, range: 1 }; // Biên cho hình chiếu 1D
+        
+        const POINTS_PER_FRAME = 2000;
+        const PRE_CALCULATION_ITERATIONS = 50000;
+        const COLORS = ['#ff4d4d', '#4dff4d', '#4d4dff', '#ffa500'];
+
+        const functions = [
+            (px, py) => [lambda * px, lambda * py],
+            (px, py) => [lambda * px, -lambda * py + 1],
+            (px, py) => [-lambda * px + 1, lambda * py],
+            (px, py) => [mu * px + alpha, mu * py + alpha]
+        ];
+        
+        // Hàm ánh xạ cho canvas attractor
+        function mapToCanvasX(mathX) {
+            return ((mathX - viewPort.minX) / viewPort.rangeX) * canvas.width;
+        }
+        function mapToCanvasY(mathY) {
+            return canvas.height - (((mathY - viewPort.minY) / viewPort.rangeY) * canvas.height);
+        }
+
+        // *** THÊM VÀO: Hàm ánh xạ cho canvas hình chiếu ***
+        function mapProjectionToCanvasX(projValue) {
+            // Ánh xạ khoảng cách chiếu 1D lên trục X của canvas
+            return ((projValue - projectionBounds.min) / projectionBounds.range) * projectionCanvas.width;
+        }
+
+        function calculateHausdorffDimension(lambda, mu) {
+            if (lambda <= 0 || mu < 0) return 0;
+            if (mu === 0) return -Math.log(3) / Math.log(lambda);
+            const moranEquation = (s) => 3 * Math.pow(lambda, s) + Math.pow(mu, s) - 1;
+            let s_low = 0, s_high = 3;
+            for (let i = 0; i < 100; i++) {
+                let s_mid = (s_low + s_high) / 2;
+                if (moranEquation(s_mid) > 0) s_low = s_mid;
+                else s_high = s_mid;
+            }
+            return (s_low + s_high) / 2;
+        }
+        
+        function draw() {
+            // Lấy trước các giá trị sin, cos để tối ưu
+            const cosTheta = Math.cos(thetaRad);
+            const sinTheta = Math.sin(thetaRad);
+
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = Math.floor(Math.random() * 4);
+                const [newX, newY] = functions[funcIndex](x, y);
+                x = newX; y = newY;
+                
+                // Vẽ lên canvas attractor (bên trái)
+                ctx.fillStyle = COLORS[funcIndex];
+                ctx.fillRect(mapToCanvasX(x), mapToCanvasY(y), 1, 1);
+
+                // *** THÊM VÀO: Vẽ lên canvas hình chiếu (bên phải) ***
+                // 1. Tính hình chiếu vô hướng (dot product) lên vector chỉ phương (cos, sin)
+                const projectedValue = x * cosTheta + y * sinTheta;
+                
+                // 2. Ánh xạ giá trị 1D này ra tọa độ canvas
+                const projX = mapProjectionToCanvasX(projectedValue);
+                const projY = projectionCanvas.height / 2; // Vẽ ở giữa theo chiều dọc
+                
+                // 3. Vẽ điểm chiếu
+                ctxProj.fillStyle = COLORS[funcIndex];
+                ctxProj.fillRect(projX, projY, 1, 1.5); // Làm điểm dày hơn một chút
+            }
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        function restart() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            // Đọc giá trị từ các slider
+            lambda = parseFloat(lambdaSlider.value);
+            const thetaDeg = parseFloat(thetaSlider.value);
+            thetaRad = thetaDeg * Math.PI / 180; // Chuyển sang radian
+
+            // Tính toán các tham số phụ thuộc
+            alpha = (lambda * lambda + lambda) / 2.0;
+            mu = 1 - lambda - (lambda * lambda);
+
+            // Cập nhật giao diện
+            lambdaValueSpan.textContent = lambda.toFixed(3);
+            thetaValueSpan.textContent = `${thetaDeg.toFixed(0)} độ`;
+            muValueSpan.textContent = mu.toFixed(3);
+            alphaValueSpan.textContent = alpha.toFixed(3);
+            const hausdorffDim = calculateHausdorffDimension(lambda, mu);
+            hausdorffDimSpan.textContent = hausdorffDim.toFixed(5);
+            
+            // *** SỬA ĐỔI: Tiền tính toán biên cho cả hai canvas ***
+            let tempX = Math.random(), tempY = Math.random();
+            let bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            let projMin = Infinity, projMax = -Infinity;
+            
+            const cosTheta = Math.cos(thetaRad);
+            const sinTheta = Math.sin(thetaRad);
+
+            // Bỏ qua các điểm ban đầu
+            for(let i=0; i < 100; i++) {
+                const funcIndex = Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+            }
+
+            // Bắt đầu tính biên
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                const funcIndex = Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+                
+                // Cập nhật biên cho attractor
+                bounds.minX = Math.min(bounds.minX, tempX);
+                bounds.maxX = Math.max(bounds.maxX, tempX);
+                bounds.minY = Math.min(bounds.minY, tempY);
+                bounds.maxY = Math.max(bounds.maxY, tempY);
+
+                // Cập nhật biên cho hình chiếu
+                const projectedValue = tempX * cosTheta + tempY * sinTheta;
+                projMin = Math.min(projMin, projectedValue);
+                projMax = Math.max(projMax, projectedValue);
+            }
+
+            // Thiết lập viewport cho attractor (trái)
+            const mathWidth = bounds.maxX - bounds.minX;
+            const mathHeight = bounds.maxY - bounds.minY;
+            let mathRange = Math.max(mathWidth, mathHeight) * 1.1; 
+            if (mathRange < 1e-9) mathRange = 1; 
+            const centerX = (bounds.minX + bounds.maxX) / 2;
+            const centerY = (bounds.minY + bounds.maxY) / 2;
+            viewPort = {
+                minX: centerX - mathRange / 2,
+                minY: centerY - mathRange / 2,
+                rangeX: mathRange,
+                rangeY: mathRange
+            };
+            
+            // Thiết lập viewport cho hình chiếu (phải)
+            let projRange = (projMax - projMin) * 1.1; // Thêm 10% padding
+            if (projRange < 1e-9) projRange = 1;
+            const projCenter = (projMin + projMax) / 2;
+            projectionBounds = {
+                min: projCenter - projRange / 2,
+                range: projRange
+            };
+
+            // Xóa cả hai canvas và bắt đầu vẽ lại
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctxProj.clearRect(0, 0, projectionCanvas.width, projectionCanvas.height);
+            
+            x = Math.random(); y = Math.random();
+            for(let i=0; i<100; i++) { 
+                const funcIndex = Math.floor(Math.random() * 4);
+                [x, y] = functions[funcIndex](x, y);
+            }
+            draw();
+        }
+
+        // Gắn sự kiện cho cả hai slider
+        lambdaSlider.addEventListener('input', restart);
+        thetaSlider.addEventListener('input', restart);
+        
+        // Khởi chạy lần đầu
+        restart();
+    </script>
+
+</body>
+</html>
