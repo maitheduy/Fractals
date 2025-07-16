@@ -77,7 +77,7 @@
         const sqrt3 = Math.sqrt(3);
 
         const g1 = (p) => ({ x: p.x/3, y: p.y/3 });
-        const g2 = (p) => ({ x: p.x/6 - p.y*sqrt3/6 + 2/3, y: p.x*sqrt3/2 + p.y/6 });
+        const g2 = (p) => ({ x: p.x/6 - p.y*sqrt3/6 + 2/3, y: p.x*sqrt3/6 + p.y/6 });
         const g3 = (p) => ({ x: p.x/6 + p.y*sqrt3/6 + 1,   y: -p.x*sqrt3/6 + p.y/6 + sqrt3/2 });
         const g4 = (p) => ({ x: p.x/3 + 4/3, y: p.y/3 });
         
