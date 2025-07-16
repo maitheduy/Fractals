@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xây dựng IFS từ Ràng buộc Hình học</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; background-color: #f0f0f0; margin: 0; padding: 20px; gap: 20px; justify-content: center; }
+        .container { display: flex; gap: 20px; }
+        #canvas-container { border: 2px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        canvas { display: block; background-color: #000; }
+        #controls { width: 480px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
+        h1, h2, h3 { text-align: center; color: #333; margin: 0 0 10px 0; }
+        .control-group { border: 1px solid #ddd; padding: 15px; border-radius: 6px; }
+        .slider-group { display: grid; grid-template-columns: 30px 1fr 70px; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .display-container { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 10px; margin-bottom: 8px; }
+        label { font-weight: bold; color: #555; justify-self: end; }
+        input[type="range"] { width: 100%; margin: 0;}
+        input[type="number"] { width: 100%; text-align: center; font-family: 'Courier New', monospace; }
+        span { font-family: 'Courier New', Courier, monospace; font-weight: bold; }
+        .matrix-display { background-color: #f5f5f5; padding: 10px; border-radius: 4px; font-family: 'Courier New', Courier, monospace; white-space: pre; line-height: 1.4; color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="controls">
+            <h1>Bảng điều khiển</h1>
+            <div class="control-group">
+                <h2>Tham số Hình học</h2>
+                <div class="slider-group">
+                    <label for="m-slider">m:</label>
+                    <input type="range" id="m-slider" min="0" max="2" step="0.001" value="0.5">
+                    <input type="number" id="m-text" min="0" max="2" step="0.01" value="0.5">
+                </div>
+                <div class="slider-group">
+                    <label for="n-slider">n:</label>
+                    <input type="range" id="n-slider" min="0.01" max="1.99" step="0.001" value="0.667">
+                     <input type="number" id="n-text" min="0.01" max="1.99" step="0.01" value="0.67">
+                </div>
+                <div class="slider-group">
+                    <label for="h-slider">h:</label>
+                    <input type="range" id="h-slider" min="-1.5" max="1.5" step="0.001" value="0">
+                    <input type="number" id="h-text" min="-1.5" max="1.5" step="0.01" value="0">
+                </div>
+            </div>
+            <div class="control-group">
+                <h2>Thông số Tính toán</h2>
+                <div class="display-container">
+                    <label>P(f₁):</label> <span id="prob-f1">...</span>
+                </div>
+                <div class="display-container">
+                    <label>P(f₂):</label> <span id="prob-f2">...</span>
+                </div>
+                 <div class="display-container">
+                    <label style="color: #0056b3;">Số chiều Hausdorff:</label>
+                    <span id="hausdorff-dim" style="color: #0056b3; font-size:1.2em;">...</span>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3>Hàm co f₁</h3>
+                <div class="matrix-display" id="f1-display"></div>
+            </div>
+            <div class="control-group">
+                <h3>Hàm co f₂</h3>
+                <div class="matrix-display" id="f2-display"></div>
+            </div>
+        </div>
+        <div>
+            <h1>Attractor Tạo bởi Ràng buộc Hình học</h1>
+            <div id="canvas-container">
+                <canvas id="mainCanvas" width="800" height="600"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const sliders = { m: document.getElementById('m-slider'), n: document.getElementById('n-slider'), h: document.getElementById('h-slider') };
+        const textInputs = { m: document.getElementById('m-text'), n: document.getElementById('n-text'), h: document.getElementById('h-text') };
+        const displays = { f1: document.getElementById('f1-display'), f2: document.getElementById('f2-display'), prob_f1: document.getElementById('prob-f1'), prob_f2: document.getElementById('prob-f2'), hausdorff: document.getElementById('hausdorff-dim') };
+
+        const POINTS_TO_DRAW = 150000;
+        const PRE_CALCULATION_ITERATIONS = 50000; // Số điểm để tính biên
+        
+        let finalViewport = {};
+        let f1, f2;
+        let prob_f1;
+
+        function invert2x2Matrix(m) { const det = m.a * m.d - m.b * m.c; if (Math.abs(det) < 1e-9) return null; return { a: m.d / det, b: -m.b / det, c: -m.c / det, d: m.a / det }; }
+        function multiplyMatrices(m1, m2) { return { a: m1.a * m2.a + m1.b * m2.c, b: m1.a * m2.b + m1.b * m2.d, c: m1.c * m2.a + m1.d * m2.c, d: m1.c * m2.b + m1.d * m2.d }; }
+        function calculateHausdorffDimension(det1, det2) { if (det1 <= 0 || det2 <= 0) return 0; const moranEquation = (s) => Math.pow(det1, s / 2) + Math.pow(det2, s / 2) - 1; let s_low = 0.0, s_high = 2.0; for (let i = 0; i < 100; i++) { const s_mid = (s_low + s_high) / 2; if (moranEquation(s_mid) > 0) { s_low = s_mid; } else { s_high = s_mid; } } return (s_low + s_high) / 2; }
+        
+        function mapToCanvasX(x) { return ((x - finalViewport.minX) / finalViewport.rangeX) * canvas.width; }
+        function mapToCanvasY(y) { return canvas.height - (((y - finalViewport.minY) / finalViewport.rangeY) * canvas.height); }
+        
+        function drawPoint(p, color, radius = 4) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(mapToCanvasX(p.x), mapToCanvasY(p.y), radius, 0, 2 * Math.PI); ctx.fill(); }
+        function drawLabel(text, p, color) { ctx.font = 'bold 14px Arial'; ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(text, mapToCanvasX(p.x) + 8, mapToCanvasY(p.y)); }
+        function drawVector(p1, p2, color) { ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mapToCanvasX(p1.x), mapToCanvasY(p1.y)); ctx.lineTo(mapToCanvasX(p2.x), mapToCanvasY(p2.y)); ctx.stroke(); }
+
+        function restart() {
+            // 1. Lấy tham số và tính toán các hàm co (giữ nguyên)
+            const m = parseFloat(sliders.m.value); const n = parseFloat(sliders.n.value); const h = parseFloat(sliders.h.value);
+            const Pts = { O: { x: 0, y: 0 }, M: { x: 1, y: m }, A: { x: 2, y: 0 }, P: { x: n, y: h }, Q: { x: 2 - n, y: h } };
+            const Vecs = { OA: { x: 2, y: 0 }, OM: { x: 1, y: m }, OP: { x: n, y: h }, AM: { x: -1, y: m }, AQ: { x: -n, y: h } };
+            const Mat_Basis = { a: Vecs.OA.x, b: Vecs.OM.x, c: Vecs.OA.y, d: Vecs.OM.y };
+            const Mat_C1 = { a: Vecs.OM.x, b: Vecs.OP.x, c: Vecs.OM.y, d: Vecs.OP.y };
+            const Mat_C2 = { a: Vecs.AM.x, b: Vecs.AQ.x, c: Vecs.AM.y, d: Vecs.AQ.y };
+            const Mat_Basis_inv = invert2x2Matrix(Mat_Basis);
+            if (!Mat_Basis_inv) return;
+            const M1 = multiplyMatrices(Mat_C1, Mat_Basis_inv); const t1 = { x: 0, y: 0 };
+            f1 = (p) => ({ x: M1.a * p.x + M1.b * p.y + t1.x, y: M1.c * p.x + M1.d * p.y + t1.y });
+            const M2 = multiplyMatrices(Mat_C2, Mat_Basis_inv); const t2 = Vecs.OA;
+            f2 = (p) => ({ x: M2.a * p.x + M2.b * p.y + t2.x, y: M2.c * p.x + M2.d * p.y + t2.y });
+            const detM1 = Math.abs(M1.a * M1.d - M1.b * M1.c); const detM2 = Math.abs(M2.a * M2.d - M2.b * M2.c);
+            const totalDet = detM1 + detM2; prob_f1 = (totalDet < 1e-9) ? 0.5 : (detM1 / totalDet);
+            const hausdorffDim = calculateHausdorffDimension(detM1, detM2);
+            
+            // *** SỬA ĐỔI: LOGIC TÍNH TOÁN KHUNG NHÌN ĐỘNG ***
+
+            // 2. Tiền tính toán biên của attractor
+            let bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            let p = { x: Math.random(), y: Math.random() };
+            for(let i = 0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                if (Math.random() < prob_f1) { p = f1(p); } else { p = f2(p); }
+                if (i > 100) { // Bỏ qua các điểm ban đầu
+                    bounds.minX = Math.min(bounds.minX, p.x); bounds.maxX = Math.max(bounds.maxX, p.x);
+                    bounds.minY = Math.min(bounds.minY, p.y); bounds.maxY = Math.max(bounds.maxY, p.y);
+                }
+            }
+
+            // 3. Mở rộng biên để bao gồm các điểm điều khiển
+            for (const key in Pts) {
+                bounds.minX = Math.min(bounds.minX, Pts[key].x); bounds.maxX = Math.max(bounds.maxX, Pts[key].x);
+                bounds.minY = Math.min(bounds.minY, Pts[key].y); bounds.maxY = Math.max(bounds.maxY, Pts[key].y);
+            }
+
+            // 4. Tạo viewport từ các biên đã tính, thêm padding và cân bằng tỉ lệ
+            const centerX = (bounds.minX + bounds.maxX) / 2;
+            const centerY = (bounds.minY + bounds.maxY) / 2;
+            let mathWidth = (bounds.maxX - bounds.minX) * 1.1; // Thêm 10% padding
+            let mathHeight = (bounds.maxY - bounds.minY) * 1.1;
+            if (mathWidth < 1e-6) mathWidth = 1; if (mathHeight < 1e-6) mathHeight = 1;
+
+            const canvasAspect = canvas.width / canvas.height;
+            const mathAspect = mathWidth / mathHeight;
+            
+            finalViewport = {};
+            if (canvasAspect > mathAspect) {
+                finalViewport.rangeX = mathHeight * canvasAspect; finalViewport.rangeY = mathHeight;
+            } else {
+                finalViewport.rangeX = mathWidth; finalViewport.rangeY = mathWidth / canvasAspect;
+            }
+            finalViewport.minX = centerX - finalViewport.rangeX / 2;
+            finalViewport.minY = centerY - finalViewport.rangeY / 2;
+            
+            // 5. Cập nhật giao diện và vẽ lại
+            const fmt = (num) => num.toFixed(3).padStart(7, ' ');
+            displays.f1.textContent = `M₁ = [${fmt(M1.a)} ${fmt(M1.b)}]\n     [${fmt(M1.c)} ${fmt(M1.d)}] \nt₁ = [${fmt(t1.x)}, ${fmt(t1.y)}]`;
+            displays.f2.textContent = `M₂ = [${fmt(M2.a)} ${fmt(M2.b)}]\n     [${fmt(M2.c)} ${fmt(M2.d)}] \nt₂ = [${fmt(t2.x)}, ${fmt(t2.y)}]`;
+            displays.prob_f1.textContent = `${(prob_f1 * 100).toFixed(1)}%`;
+            displays.prob_f2.textContent = `${((1 - prob_f1) * 100).toFixed(1)}%`;
+            displays.hausdorff.textContent = hausdorffDim.toFixed(5);
+            drawScene(Pts);
+        }
+
+        function drawScene(Pts) { ctx.clearRect(0, 0, canvas.width, canvas.height); drawVector(Pts.O, Pts.A, '#555'); drawVector(Pts.O, Pts.M, '#666'); drawVector(Pts.M, Pts.A, '#666'); Object.keys(Pts).forEach(key => { drawPoint(Pts[key], 'yellow'); drawLabel(key, Pts[key], 'white'); }); let p = { x: Math.random(), y: Math.random() }; for (let i = 0; i < POINTS_TO_DRAW; i++) { let color; if (Math.random() < prob_f1) { p = f1(p); color = 'rgba(255, 100, 100, 0.8)'; } else { p = f2(p); color = 'rgba(100, 100, 255, 0.8)'; } if (i > 100) { ctx.fillStyle = color; ctx.fillRect(mapToCanvasX(p.x), mapToCanvasY(p.y), 2, 2); } } }
+
+        function setupTwoWayBinding(slider, textInput) { slider.addEventListener('input', () => { textInput.value = parseFloat(slider.value).toFixed(3); restart(); }); textInput.addEventListener('change', () => { const val = parseFloat(textInput.value); if (!isNaN(val)) { slider.value = val; restart(); } }); }
+        setupTwoWayBinding(sliders.m, textInputs.m);
+        setupTwoWayBinding(sliders.n, textInputs.n);
+        setupTwoWayBinding(sliders.h, textInputs.h);
+        
+        restart();
+    </script>
+</body>
+</html>
