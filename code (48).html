@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm tra Giả thuyết: So sánh hai Hệ IFS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #canvas-container {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        canvas {
+            display: block;
+            background-color: #000;
+        }
+        .legend {
+            margin-top: 15px;
+            display: flex;
+            gap: 20px;
+            font-size: 1.1em;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>Kiểm tra sự Trùng khớp của hai Attractor</h1>
+    <div id="canvas-container">
+        <canvas id="comparisonCanvas" width="900" height="600"></canvas>
+    </div>
+    <div class="legend">
+        <div class="legend-item">
+            <div class="color-box" style="background-color: red;"></div>
+            <span>Hệ 4 hàm (Koch Cổ điển)</span>
+        </div>
+        <div class="legend-item">
+            <div class="color-box" style="background-color: lime;"></div>
+            <span>Hệ 2 hàm (Tùy chỉnh)</span>
+        </div>
+        <div class="legend-item">
+            <div class="color-box" style="background-color: yellow;"></div>
+            <span>Vùng Trùng khớp (nếu có)</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('comparisonCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- HỆ 1: 4 HÀM CO CỔ ĐIỂN CHÍNH XÁC (TRÊN ĐOẠN [0, 2]) ---
+        // Đoạn cơ sở là O(0,0) đến A(2,0). Độ dài là 2.
+        // Các điểm của bộ tạo: P0=(0,0), P1=(2/3,0), P2=(1, sqrt(3)/3), P3=(4/3,0), P4=(2,0)
+        const sqrt3 = Math.sqrt(3);
+
+        const g1 = (p) => ({ x: p.x/3, y: p.y/3 });
+        const g2 = (p) => ({ x: p.x/6 - p.y*sqrt3/6 + 2/3, y: p.x*sqrt3/6 + p.y/6 });
+        const g3 = (p) => ({ x: p.x/6 + p.y*sqrt3/6 + 1,   y: -p.x*sqrt3/6 + p.y/6 + sqrt3/3 });
+        const g4 = (p) => ({ x: p.x/3 + 4/3, y: p.y/3 });
+        
+        const classic_ifs = [g1, g2, g3, g4];
+
+
+        // --- HỆ 2: 2 HÀM CO TÙY CHỈNH (VỚI CÁC THAM SỐ CỦA BẠN) ---
+        const m = Math.sqrt(3)/2; // ≈ 0.866
+        const n = 2/3;
+        const h = 0;
+
+        // Các hàm đại số tuyến tính
+        function invert2x2Matrix(m) { const det = m.a * m.d - m.b * m.c; if (Math.abs(det) < 1e-9) return null; return { a: m.d / det, b: -m.b / det, c: -m.c / det, d: m.a / det }; }
+        function multiplyMatrices(m1, m2) { return { a: m1.a * m2.a + m1.b * m2.c, b: m1.a * m2.b + m1.b * m2.d, c: m1.c * m2.a + m1.d * m2.c, d: m1.c * m2.b + m1.d * m2.d }; }
+
+        // Tính toán các ma trận M1, M2 một cách chính xác
+        const Vecs = { OA: { x: 2, y: 0 }, OM: { x: 1, y: m }, OP: { x: n, y: h }, AM: { x: -1, y: m }, AQ: { x: (2 - n) - 2, y: h } };
+        const Mat_Basis = { a: Vecs.OA.x, b: Vecs.OM.x, c: Vecs.OA.y, d: Vecs.OM.y };
+        const Mat_C1 = { a: Vecs.OM.x, b: Vecs.OP.x, c: Vecs.OM.y, d: Vecs.OP.y };
+        const Mat_C2 = { a: Vecs.AM.x, b: Vecs.AQ.x, c: Vecs.AM.y, d: Vecs.AQ.y };
+        const Mat_Basis_inv = invert2x2Matrix(Mat_Basis);
+
+        const M1 = multiplyMatrices(Mat_C1, Mat_Basis_inv);
+        const t1 = { x: 0, y: 0 };
+        const f1 = (p) => ({ x: M1.a * p.x + M1.b * p.y + t1.x, y: M1.c * p.x + M1.d * p.y + t1.y });
+
+        const M2 = multiplyMatrices(Mat_C2, Mat_Basis_inv);
+        const t2 = Vecs.OA;
+        const f2 = (p) => ({ x: M2.a * p.x + M2.b * p.y + t2.x, y: M2.c * p.x + M2.d * p.y + t2.y });
+        
+        const custom_ifs = [f1, f2];
+
+        // --- LOGIC VẼ ---
+        const POINTS_PER_SYSTEM = 150000;
+        const BURN_IN = 100;
+        const VIEWPORT = { minX: -0.2, maxX: 2.2, minY: -0.2, maxY: 1.2 };
+
+        function mapToCanvasX(x) { return ((x - VIEWPORT.minX) / (VIEWPORT.maxX - VIEWPORT.minX)) * canvas.width; }
+        function mapToCanvasY(y) { return canvas.height - (((y - VIEWPORT.minY) / (VIEWPORT.maxY - VIEWPORT.minY)) * canvas.height); }
+
+        function runChaosGame(ifs, color) {
+            let p = { x: 0, y: 0 };
+            const num_functions = ifs.length;
+            ctx.fillStyle = color;
+            for (let i = 0; i < POINTS_PER_SYSTEM; i++) {
+                const choice = Math.floor(Math.random() * num_functions);
+                p = ifs[choice](p);
+                if (i > BURN_IN) {
+                    ctx.fillRect(mapToCanvasX(p.x), mapToCanvasY(p.y), 2, 2);
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Đặt alpha để thấy sự chồng lấp
+            ctx.globalAlpha = 0.6;
+
+            // Vẽ hệ 2 hàm của bạn (màu xanh lá)
+            console.log("Đang vẽ Hệ 2 hàm tùy chỉnh (màu xanh lá)...");
+            runChaosGame(custom_ifs, 'lime');
+
+            // Vẽ hệ 4 hàm cổ điển (màu đỏ tươi)
+            console.log("Đang vẽ Hệ 4 hàm cổ điển (màu đỏ)...");
+            runChaosGame(classic_ifs, 'red');
+        }
+
+        // Bắt đầu vẽ
+        draw();
+    </script>
+</body>
+</html>
