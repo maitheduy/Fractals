@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>IFS Attractor – 2 Hàm Co Affine</title>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      background: #f4f8fb; 
+      margin: 0;
+      display: flex;
+      flex-direction: row;
+      min-height: 100vh;
+    }
+    .controls {
+      padding: 24px 16px 24px 36px;
+      background: #fff;
+      box-shadow: 2px 0 10px #0001;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 285px;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .slider-row label { width: 36px; }
+    .slider-row input[type=number] { width: 60px; padding: 2px 4px; font-size: 1em; }
+    .slider-row input[type=range] { flex: 1; }
+    .hausdorff-box {
+      margin-top: 18px;
+      font-size: 1.13em;
+      color: #064f35;
+      background: #eafff2;
+      border-left: 4px solid #42b983;
+      padding: 8px 12px;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    .canvas-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      background: linear-gradient(135deg, #f0f5fa 90%, #e0f9f0 100%);
+    }
+    .formula-row {
+      display: flex;
+      flex-direction: row;
+      gap: 22px;
+      margin-top: 12px;
+      margin-bottom: 0;
+      width: 100%;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .formula-box {
+      background: #fcffed;
+      border-left: 4px solid #ffdb3c;
+      border-radius: 5px;
+      padding: 10px 18px;
+      font-size: 1.09em;
+      min-width: 250px;
+      max-width: 355px;
+      box-shadow: 0 1px 6px #0001;
+      color: #393312;
+      margin: 0;
+    }
+    .formula-box-total {
+      background: #e9f5ff;
+      border-left: 4px solid #3bb6ff;
+      border-radius: 5px;
+      padding: 10px 18px;
+      font-size: 1.06em;
+      min-width: 250px;
+      max-width: 370px;
+      box-shadow: 0 1px 6px #0001;
+      color: #144262;
+      margin: 0;
+    }
+    canvas {
+      background: #fff;
+      box-shadow: 0 0 12px #0002;
+      border-radius: 8px;
+      margin-top: 18px;
+      margin-bottom: 0;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <h2>Điều khiển tham số IFS</h2>
+    <div id="param-controls"></div>
+    <div class="hausdorff-box">
+      Chiều Hausdorff (ước lượng): <span id="hausdorff-dim"></span>
+    </div>
+  </div>
+  <div class="canvas-wrap">
+    <div class="formula-row">
+      <div class="formula-box-total" id="formula-general"></div>
+      <div class="formula-box" id="formula-mathjax"></div>
+    </div>
+    <canvas id="ifs-canvas" width="600" height="600"></canvas>
+  </div>
+  <script>
+    // === Tham số mặc định ===
+    const defaultParams = {
+      m: 0.5,
+      m1: 0.5,
+      m2: 0.57,
+      n: 2/3,
+      h: 0,
+    };
+
+    // === Tạo sliders và inputs ===
+    const paramMeta = [
+      { name: "m", min: -2, max: 2, step: 0.01, label: "m" },
+      { name: "m1", min: -2, max: 2, step: 0.01, label: "m₁" },
+      { name: "m2", min: -2, max: 2, step: 0.01, label: "m₂" },
+      { name: "n", min: -2, max: 2, step: 0.01, label: "n" },
+      { name: "h", min: -2, max: 2, step: 0.01, label: "h" }
+    ];
+    const params = {...defaultParams};
+    const controlsDiv = document.getElementById("param-controls");
+    paramMeta.forEach(meta => {
+      const row = document.createElement("div");
+      row.className = "slider-row";
+      row.innerHTML = `
+        <label for="slider-${meta.name}">${meta.label}</label>
+        <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" id="slider-${meta.name}" value="${params[meta.name]}">
+        <input type="number" id="input-${meta.name}" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${params[meta.name]}">
+      `;
+      controlsDiv.appendChild(row);
+
+      // Liên kết slider <-> input
+      const slider = row.querySelector("input[type=range]");
+      const input = row.querySelector("input[type=number]");
+      slider.oninput = e => {
+        params[meta.name] = Number(slider.value);
+        input.value = slider.value;
+        updateAll();
+      };
+      input.oninput = e => {
+        let v = Number(input.value);
+        v = Math.max(meta.min, Math.min(meta.max, v));
+        params[meta.name] = v;
+        slider.value = v;
+        updateAll();
+      };
+    });
+
+    // === Vẽ hệ trục và attractor ===
+    const canvas = document.getElementById("ifs-canvas");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    // Vùng thực hiển thị: x∈[-0.3,2.3], y∈[-0.3,0.8]
+    function toCanvas(x, y) {
+      const x0 = -0.3, x1 = 2.3, y0 = -0.3, y1 = 0.8;
+      return [
+        (x - x0) / (x1 - x0) * W,
+        H - (y - y0) / (y1 - y0) * H
+      ];
+    }
+
+    function drawAxes() {
+      ctx.save();
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = "#b0bec5";
+      ctx.lineWidth = 1.2;
+      for(let gx=-0.2; gx<=2.2; gx+=0.2){
+        const [x0, y0] = toCanvas(gx, -0.3);
+        const [x1, y1] = toCanvas(gx, 0.8);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
+      for(let gy=-0.2; gy<=0.8; gy+=0.2){
+        const [x0, y0] = toCanvas(-0.3, gy);
+        const [x1, y1] = toCanvas(2.3, gy);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = "#2d3758";
+      ctx.lineWidth = 2.2;
+      let [x0, y0] = toCanvas(-0.3, 0);
+      let [x1, y1] = toCanvas(2.3, 0);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      [x0, y0] = toCanvas(0, -0.3); [x1, y1] = toCanvas(0, 0.8);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.fillStyle = "#2d3758";
+      ctx.font = "13px Arial";
+      for(let x=0; x<=2.0; x+=0.5){
+        const [cx,cy] = toCanvas(x,-0.07);
+        ctx.fillText(x.toFixed(1), cx-8, cy+18);
+      }
+      for(let y=0; y<=0.8; y+=0.2){
+        const [cx,cy] = toCanvas(-0.07,y);
+        ctx.fillText(y.toFixed(1), cx-30, cy+5);
+      }
+      ctx.restore();
+    }
+
+    // --- Công thức f1, f2 ---
+    function makeMaps({m, m1, m2, n, h}) {
+      const a = 0.5, c = m1/2;
+      const b = (n - 0.5)/m;
+      const d = (h - m1/2)/m;
+      const p = -0.5, r = m2/2;
+      const q = (-n + 0.5)/m;
+      const s = (h - m2/2)/m;
+      return [
+        function([x, y]) {
+          return [
+            a*x + b*y,
+            c*x + d*y
+          ];
+        },
+        function([x, y]) {
+          return [
+            p*x + q*y + 2,
+            r*x + s*y
+          ];
+        }
+      ];
+    }
+
+    function drawIFS(params, numIter = 80000, warmup = 18) {
+      drawAxes();
+      const [f1, f2] = makeMaps(params);
+      let x = Math.random()*2, y = Math.random()*0.8;
+      ctx.save();
+      ctx.globalAlpha = 0.76;
+      const sz = 1.5; // size point
+      for(let i=0; i<numIter; ++i){
+        const fidx = Math.random()<0.5 ? 0 : 1;
+        const [nx, ny] = (fidx === 0 ? f1([x,y]) : f2([x,y]));
+        x = nx; y = ny;
+        if(i > warmup){
+          const [cx, cy] = toCanvas(x, y);
+          ctx.fillStyle = (fidx === 0 ? "#2eba52" : "#ff2121");
+          ctx.fillRect(cx, cy, sz, sz);
+        }
+      }
+      ctx.restore();
+    }
+
+    // --- Chiều Hausdorff ---
+    function calcHausdorffDim(params) {
+      const {m, m1, m2, n, h} = params;
+      const a1 = 0.5, b1 = (n-0.5)/m, c1 = m1/2, d1 = (h-m1/2)/m;
+      const detA1 = a1*d1 - b1*c1;
+      const p2 = -0.5, q2 = (-n+0.5)/m, r2 = m2/2, s2 = (h-m2/2)/m;
+      const detA2 = p2*s2 - q2*r2;
+      const lam1 = Math.sqrt(Math.abs(detA1)), lam2 = Math.sqrt(Math.abs(detA2));
+      if (lam1 <= 0 || lam2 <= 0) return "–";
+      function solveDim(lambda1, lambda2) {
+        let s = 0.6;
+        for(let k=0; k<30; ++k){
+          let f = Math.pow(lambda1, s) + Math.pow(lambda2, s) - 1;
+          let df = Math.log(lambda1)*Math.pow(lambda1, s) + Math.log(lambda2)*Math.pow(lambda2, s);
+          if(Math.abs(df)<1e-8) break;
+          s = s - f/df;
+        }
+        return Math.max(0, Math.min(2, s));
+      }
+      return solveDim(lam1, lam2).toFixed(4);
+    }
+
+    // --- Hiển thị công thức động ---
+    function getAffineFormula({m, m1, m2, n, h}) {
+      function tex(v) {
+        return (Math.abs(v) < 1e-7) ? '0' : (Math.round(v * 1000) / 1000).toString();
+      }
+      const a1 = 0.5, c1 = m1/2, b1 = (n-0.5)/m, d1 = (h-m1/2)/m;
+      const p2 = -0.5, r2 = m2/2, q2 = (-n+0.5)/m, s2 = (h-m2/2)/m;
+      const f1 =
+        `f_1\\left(\\begin{bmatrix}x \\\\ y\\end{bmatrix}\\right) =` +
+        `\\begin{bmatrix}${tex(a1)} & ${tex(b1)} \\\\ ${tex(c1)} & ${tex(d1)}\\end{bmatrix}` +
+        `\\begin{bmatrix}x \\\\ y\\end{bmatrix}`;
+      const f2 =
+        `f_2\\left(\\begin{bmatrix}x \\\\ y\\end{bmatrix}\\right) =` +
+        `\\begin{bmatrix}${tex(p2)} & ${tex(q2)} \\\\ ${tex(r2)} & ${tex(s2)}\\end{bmatrix}` +
+        `\\begin{bmatrix}x \\\\ y\\end{bmatrix} + \\begin{bmatrix}2 \\\\ 0\\end{bmatrix}`;
+      return `\\[
+        \\begin{aligned}
+        &${f1} \\\\[7pt]
+        &${f2}
+        \\end{aligned}
+      \\]`;
+    }
+
+    // --- Công thức tổng quát của hệ hàm co ---
+    function getGeneralFormula() {
+      return String.raw`
+        \[
+        \begin{aligned}
+        &\textbf{Hệ hàm co affine tổng quát:} \\\\[6pt]
+        &f_1\left(\begin{bmatrix}x \\ y\end{bmatrix}\right) = 
+            \begin{bmatrix}\frac{1}{2} & \frac{n-\frac{1}{2}}{m} \\ \frac{m_1}{2} & \frac{h-\frac{m_1}{2}}{m}\end{bmatrix}
+            \begin{bmatrix}x \\ y\end{bmatrix} \\\\[7pt]
+        &f_2\left(\begin{bmatrix}x \\ y\end{bmatrix}\right) = 
+            \begin{bmatrix}-\frac{1}{2} & \frac{-n+\frac{1}{2}}{m} \\ \frac{m_2}{2} & \frac{h-\frac{m_2}{2}}{m}\end{bmatrix}
+            \begin{bmatrix}x \\ y\end{bmatrix} + \begin{bmatrix}2 \\ 0\end{bmatrix}
+        \end{aligned}
+        \]
+      `;
+    }
+
+    // --- Tổng hợp: cập nhật khi kéo/thay đổi tham số ---
+    function updateAll() {
+      drawIFS(params);
+      document.getElementById("hausdorff-dim").textContent = calcHausdorffDim(params);
+      document.getElementById("formula-general").innerHTML = getGeneralFormula();
+      document.getElementById("formula-mathjax").innerHTML = getAffineFormula(params);
+      if (window.MathJax) window.MathJax.typesetPromise();
+    }
+
+    // --- Khởi tạo ---
+    updateAll();
+
+    document.querySelectorAll("input[type=number]").forEach(inp => {
+      inp.addEventListener("keydown", e => {
+        if(e.key==="Enter") updateAll();
+      });
+    });
+  </script>
+</body>
+</html>
