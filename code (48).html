@@ -1,153 +1,190 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiểm tra Giả thuyết: So sánh hai Hệ IFS</title>
+    <title>Attractor hệ 2 hàm co</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            background-color: #f0f0f0;
-            margin: 0;
             padding: 20px;
-            box-sizing: border-box;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        #canvas-container {
-            border: 2px solid #ccc;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
         canvas {
-            display: block;
-            background-color: #000;
+            border: 1px solid #ddd;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin: 20px;
         }
-        .legend {
-            margin-top: 15px;
-            display: flex;
-            gap: 20px;
-            font-size: 1.1em;
+        .controls {
+            margin: 15px 0;
         }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .color-box {
-            width: 20px;
-            height: 20px;
-            border: 1px solid #555;
+        .formula {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h1>Kiểm tra sự Trùng khớp của hai Attractor</h1>
-    <div id="canvas-container">
-        <canvas id="comparisonCanvas" width="900" height="600"></canvas>
+    <h1>Attractor hệ 2 hàm co</h1>
+    
+    <div class="formula">
+        <p>f₁(x,y) = [1/2, 1/6; 1/2, -1/2] * [x; y] + [0; 0]</p>
+        <p>f₂(x,y) = [-1/2, -1/6; 1/2, -1/2] * [x; y] + [2; 0]</p>
     </div>
-    <div class="legend">
-        <div class="legend-item">
-            <div class="color-box" style="background-color: red;"></div>
-            <span>Hệ 4 hàm (Koch Cổ điển)</span>
-        </div>
-        <div class="legend-item">
-            <div class="color-box" style="background-color: lime;"></div>
-            <span>Hệ 2 hàm (Tùy chỉnh)</span>
-        </div>
-        <div class="legend-item">
-            <div class="color-box" style="background-color: yellow;"></div>
-            <span>Vùng Trùng khớp (nếu có)</span>
-        </div>
+    
+    <div class="controls">
+        <label for="points">Số điểm:</label>
+        <input type="number" id="points" min="1000" max="100000" step="1000" value="30000">
+        <button onclick="drawFractal()">Vẽ Lại</button>
     </div>
+    
+    <canvas id="fractalCanvas" width="700" height="700"></canvas>
 
     <script>
-        const canvas = document.getElementById('comparisonCanvas');
+        const canvas = document.getElementById('fractalCanvas');
         const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const scale = 150; // Tỉ lệ phóng đại
 
-        // --- HỆ 1: 4 HÀM CO CỔ ĐIỂN CHÍNH XÁC (TRÊN ĐOẠN [0, 2]) ---
-        // Đoạn cơ sở là O(0,0) đến A(2,0). Độ dài là 2.
-        // Các điểm của bộ tạo: P0=(0,0), P1=(2/3,0), P2=(1, sqrt(3)/3), P3=(4/3,0), P4=(2,0)
-        const sqrt3 = Math.sqrt(3);
+        // Màu sắc cho từng hàm
+        const colors = ['#00cc66', '#ff0066']; // Xanh lá, Đỏ tươi
 
-        const g1 = (p) => ({ x: p.x/3, y: p.y/3 });
-        const g2 = (p) => ({ x: p.x/6 - p.y*sqrt3/6 + 2/3, y: p.x*sqrt3/6 + p.y/6 });
-        const g3 = (p) => ({ x: p.x/6 + p.y*sqrt3/6 + 1,   y: -p.x*sqrt3/6 + p.y/6 + sqrt3/2 });
-        const g4 = (p) => ({ x: p.x/3 + 4/3, y: p.y/3 });
-        
-        const classic_ifs = [g1, g2, g3, g4];
+        // 2 hàm co
+        const transforms = [
+            // f1: xanh lá
+            (x, y) => ({
+                x: 0.5 * x + (1/6) * y,
+                y: 0.5 * x - 0.5 * y,
+                color: 0
+            }),
+            // f2: đỏ tươi
+            (x, y) => ({
+                x: -0.5 * x - (1/6) * y + 2,
+                y: 0.5 * x - 0.5 * y,
+                color: 1
+            })
+        ];
 
+        // Tính xác suất dựa trên định thức
+        function calculateProbabilities() {
+            const detA = Math.abs(0.5*(-0.5) - (1/6)*0.5);
+            const detB = Math.abs(-0.5*(-0.5) - (-1/6)*0.5);
+            const Su = detA + detB;
+            return {
+                p1: detA/Su,
+                p2: detB/Su
+            };
+        }
 
-        // --- HỆ 2: 2 HÀM CO TÙY CHỈNH (VỚI CÁC THAM SỐ CỦA BẠN) ---
-        const m = 1/2
-        const n = 2/3;
-        const h = 0;
+        // Tạo điểm ngẫu nhiên
+        function generatePoints(count) {
+            const { p1, p2 } = calculateProbabilities();
+            const points = [];
+            let x = 0, y = 0;
+            
+            for (let i = 0; i < count; i++) {
+                const r = Math.random();
+                let transform;
+                
+                if (r < p1) {
+                    transform = transforms[0];
+                } else {
+                    transform = transforms[1];
+                }
+                
+                const newPoint = transform(x, y);
+                x = newPoint.x;
+                y = newPoint.y;
+                points.push(newPoint);
+            }
+            
+            return points;
+        }
 
-        // Các hàm đại số tuyến tính
-        function invert2x2Matrix(m) { const det = m.a * m.d - m.b * m.c; if (Math.abs(det) < 1e-9) return null; return { a: m.d / det, b: -m.b / det, c: -m.c / det, d: m.a / det }; }
-        function multiplyMatrices(m1, m2) { return { a: m1.a * m2.a + m1.b * m2.c, b: m1.a * m2.b + m1.b * m2.d, c: m1.c * m2.a + m1.d * m2.c, d: m1.c * m2.b + m1.d * m2.d }; }
-
-        // Tính toán các ma trận M1, M2 một cách chính xác
-        const Vecs = { OA: { x: 2, y: 0 }, OM: { x: 1, y: m }, OP: { x: n, y: h }, AM: { x: -1, y: m }, AQ: { x: (2 - n) - 2, y: h } };
-        const Mat_Basis = { a: Vecs.OA.x, b: Vecs.OM.x, c: Vecs.OA.y, d: Vecs.OM.y };
-        const Mat_C1 = { a: Vecs.OM.x, b: Vecs.OP.x, c: Vecs.OM.y, d: Vecs.OP.y };
-        const Mat_C2 = { a: Vecs.AM.x, b: Vecs.AQ.x, c: Vecs.AM.y, d: Vecs.AQ.y };
-        const Mat_Basis_inv = invert2x2Matrix(Mat_Basis);
-
-        const M1 = multiplyMatrices(Mat_C1, Mat_Basis_inv);
-        const t1 = { x: 0, y: 0 };
-        const f1 = (p) => ({ x: M1.a * p.x + M1.b * p.y + t1.x, y: M1.c * p.x + M1.d * p.y + t1.y });
-
-        const M2 = multiplyMatrices(Mat_C2, Mat_Basis_inv);
-        const t2 = Vecs.OA;
-        const f2 = (p) => ({ x: M2.a * p.x + M2.b * p.y + t2.x, y: M2.c * p.x + M2.d * p.y + t2.y });
-        
-        const custom_ifs = [f1, f2];
-
-        // --- LOGIC VẼ ---
-        const POINTS_PER_SYSTEM = 150000;
-        const BURN_IN = 100;
-        const VIEWPORT = { minX: -0.2, maxX: 2.2, minY: -0.2, maxY: 1.2 };
-
-        function mapToCanvasX(x) { return ((x - VIEWPORT.minX) / (VIEWPORT.maxX - VIEWPORT.minX)) * canvas.width; }
-        function mapToCanvasY(y) { return canvas.height - (((y - VIEWPORT.minY) / (VIEWPORT.maxY - VIEWPORT.minY)) * canvas.height); }
-
-        function runChaosGame(ifs, color) {
-            let p = { x: 0, y: 0 };
-            const num_functions = ifs.length;
-            ctx.fillStyle = color;
-            for (let i = 0; i < POINTS_PER_SYSTEM; i++) {
-                const choice = Math.floor(Math.random() * num_functions);
-                p = ifs[choice](p);
-                if (i > BURN_IN) {
-                    ctx.fillRect(mapToCanvasX(p.x), mapToCanvasY(p.y), 2, 2);
+        // Vẽ hệ trục tọa độ với lưới
+        function drawAxes() {
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 0.5;
+            
+            // Vẽ lưới ngang
+            for (let y = -2; y <= 2; y += 0.5) {
+                const py = centerY - y * scale;
+                ctx.beginPath();
+                ctx.moveTo(50, py);
+                ctx.lineTo(canvas.width - 50, py);
+                ctx.stroke();
+                
+                // Hiển thị giá trị trục Y
+                if (y !== 0) {
+                    ctx.fillStyle = '#000';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(y.toFixed(1), 40, py + 4);
                 }
             }
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Đặt alpha để thấy sự chồng lấp
-            ctx.globalAlpha = 0.6;
-
-            // Vẽ hệ 2 hàm của bạn (màu xanh lá)
-            console.log("Đang vẽ Hệ 2 hàm tùy chỉnh (màu xanh lá)...");
-            runChaosGame(custom_ifs, 'lime');
-
-            // Vẽ hệ 4 hàm cổ điển (màu đỏ tươi)
-            console.log("Đang vẽ Hệ 4 hàm cổ điển (màu đỏ)...");
-            runChaosGame(classic_ifs, 'red');
+            // Vẽ lưới dọc
+            for (let x = -1; x <= 3; x += 0.5) {
+                const px = centerX + x * scale;
+                ctx.beginPath();
+                ctx.moveTo(px, 50);
+                ctx.lineTo(px, canvas.height - 50);
+                ctx.stroke();
+                
+                // Hiển thị giá trị trục X
+                if (x !== 0) {
+                    ctx.fillStyle = '#000';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(x.toFixed(1), px, canvas.height - 35);
+                }
+            }
+            
+            // Vẽ trục chính
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            // Trục hoành
+            ctx.beginPath();
+            ctx.moveTo(50, centerY);
+            ctx.lineTo(canvas.width - 50, centerY);
+            ctx.stroke();
+            // Trục tung
+            ctx.beginPath();
+            ctx.moveTo(centerX, 50);
+            ctx.lineTo(centerX, canvas.height - 50);
+            ctx.stroke();
+            
+            // Ghi nhãn trục
+            ctx.fillStyle = '#000';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('x', canvas.width - 30, centerY + 20);
+            ctx.textAlign = 'right';
+            ctx.fillText('y', centerX - 10, 40);
         }
 
-        // Bắt đầu vẽ
-        draw();
+        function drawFractal() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const pointCount = parseInt(document.getElementById('points').value);
+            const points = generatePoints(pointCount);
+            
+            // Vẽ hệ trục trước
+            drawAxes();
+            
+            // Vẽ các điểm
+            points.forEach(point => {
+                const px = centerX + point.x * scale;
+                const py = centerY - point.y * scale;
+                ctx.fillStyle = colors[point.color];
+                ctx.fillRect(px, py, 2, 2);
+            });
+        }
+
+        // Vẽ lần đầu
+        drawFractal();
     </script>
 </body>
 </html>
