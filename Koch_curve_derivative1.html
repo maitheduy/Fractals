@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>IFS Attractor và Parabol y=kx(1-x)</title>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f8fb; margin: 0;
+      display: flex; flex-direction: row; min-height: 100vh;}
+    .controls {
+      padding: 24px 16px 24px 36px; background: #fff; box-shadow: 2px 0 10px #0001;
+      display: flex; flex-direction: column; gap: 18px; min-width: 315px; max-width: 410px; align-items: stretch;
+      overflow-y: auto;
+    }
+    .controls h2 {
+      margin-top: 12px; margin-bottom: 0px; color: #1e6091;
+      border-bottom: 2px solid #e0e0e0; padding-bottom: 6px;
+    }
+    .formula-box-total {
+      background: #e9f5ff; border-left: 4px solid #3bb6ff; border-radius: 5px;
+      padding: 11px 18px; font-size: 1.05em; min-width: 250px; max-width: 375px; box-shadow: 0 1px 6px #0001;
+      color: #144262; margin-bottom: 9px; margin-top: 0;
+    }
+    .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .slider-row label { width: 36px; font-weight: bold; }
+    .slider-row input[type=number] { width: 60px; padding: 2px 4px; font-size: 1em; }
+    .slider-row input[type=range] { flex: 1; }
+    .hausdorff-box {
+      margin-top: 18px; font-size: 1.13em; color: #064f35; background: #eafff2;
+      border-left: 4px solid #42b983; padding: 8px 12px; border-radius: 5px; font-weight: bold;
+    }
+    .reset-btn {
+      margin-top: 12px; margin-bottom: 6px; background: #fde047; color: #323209; font-size: 1em;
+      padding: 7px 26px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 7px #0001; transition: background 0.15s;
+    }
+    .reset-btn:hover { background: #ffc800; }
+    .canvas-wrap {
+      flex: 1; display: flex; flex-direction: row; align-items: flex-start; justify-content: center;
+      background: linear-gradient(135deg, #f0f5fa 90%, #e0f9f0 100%); gap: 0px;
+    }
+    .right-panel { display: flex; flex-direction: column; align-items: flex-start; margin-left: 0px; }
+    .formula-box {
+      background: #fcffed; border-left: 4px solid #ffdb3c; border-radius: 5px;
+      padding: 10px 18px; font-size: 1.09em; min-width: 250px; max-width: 380px; box-shadow: 0 1px 6px #0001;
+      color: #393312; margin: 12px 0 0 6px; align-self: flex-start;
+    }
+    .equal-canvas {
+      width: 600px; height: 600px;
+      background: #fff; box-shadow: 0 0 12px #0002; border-radius: 8px;
+      margin-top: 18px; margin-bottom: 0; display: block;
+    }
+    .m-equal-checkbox-row {
+      display: flex; align-items: center; gap: 9px; margin-bottom: 10px;
+      font-size: 1.07em; user-select: none;
+    }
+    .m-equal-checkbox-row label {
+      cursor: pointer; font-weight: 500; color: #27638a;
+    }
+    .slider-row input[disabled], .slider-row input[type=range][disabled] {
+      opacity: 0.44;
+      background: #ececec;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <div class="formula-box-total" id="formula-general"></div>
+    
+    <h2>Điều khiển tham số IFS</h2>
+    <div class="m-equal-checkbox-row">
+      <input type="checkbox" id="m-equal-checkbox" checked>
+      <label for="m-equal-checkbox">m = m₁ = m₂</label>
+    </div>
+    <div id="param-controls"></div>
+    
+    <h2>Điều khiển Parabol</h2>
+    <div class="slider-row">
+        <label for="k-slider">k</label>
+        <input type="range" id="k-slider" min="0" max="4" value="2.5" step="0.05">
+        <input type="number" id="k-input" min="0" max="4" step="0.05" value="2.5">
+    </div>
+
+    <button class="reset-btn" id="reset-btn">Reset Tất cả</button>
+    <div class="hausdorff-box">
+      Chiều Hausdorff (ước lượng): <span id="hausdorff-dim"></span>
+    </div>
+  </div>
+  <div class="canvas-wrap">
+    <div class="right-panel">
+      <div class="formula-box" id="formula-mathjax"></div>
+      <canvas id="main-canvas" width="600" height="600" class="equal-canvas"></canvas>
+    </div>
+  </div>
+  <script>
+    // --- Các thông số vùng hiển thị ---
+    const XMIN = -0.3, XMAX = 1.2;
+    const YMIN = -0.3, YMAX = 1.2;  // Đã thay đổi từ 0.6 lên 1.2
+    const CW = 600, CH = 600;       // Đã thay đổi từ 360 lên 600
+
+    // === Tham số mặc định ===
+    const defaultParams = {
+      m: 0.5, m1: 0.5, m2: 0.5, n: 2/3, h: 0, k: 2.5
+    };
+    const params = {...defaultParams};
+    let mEqual = true;
+
+    // === Lấy đối tượng HTML ===
+    const controlsDiv = document.getElementById("param-controls");
+    const mEqualCheckbox = document.getElementById("m-equal-checkbox");
+    const kSlider = document.getElementById("k-slider");
+    const kInput = document.getElementById("k-input");
+    const canvas = document.getElementById("main-canvas");
+    const ctx = canvas.getContext("2d");
+
+    // === Tạo sliders và inputs cho IFS ===
+    const paramMeta = [
+      { name: "m", min: -2, max: 2, step: 0.01, label: "m" },
+      { name: "m1", min: -2, max: 2, step: 0.01, label: "m₁" },
+      { name: "m2", min: -2, max: 2, step: 0.01, label: "m₂" },
+      { name: "n", min: -2, max: 2, step: 0.01, label: "n" },
+      { name: "h", min: -2, max: 2, step: 0.01, label: "h" }
+    ];
+    function createControls() {
+      controlsDiv.innerHTML = "";
+      paramMeta.forEach(meta => {
+        const row = document.createElement("div");
+        row.className = "slider-row";
+        row.innerHTML = `
+          <label for="slider-${meta.name}">${meta.label}</label>
+          <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" id="slider-${meta.name}" value="${params[meta.name]}">
+          <input type="number" id="input-${meta.name}" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${params[meta.name]}">
+        `;
+        controlsDiv.appendChild(row);
+      });
+    }
+    createControls();
+
+    // === Xử lý sự kiện cho các điều khiển ===
+    function setupEventListeners() {
+        // IFS Controls
+        paramMeta.forEach(meta => {
+            const slider = document.getElementById(`slider-${meta.name}`);
+            const input = document.getElementById(`input-${meta.name}`);
+            slider.oninput = () => {
+                if (mEqual && (meta.name === 'm1' || meta.name === 'm2')) return;
+                params[meta.name] = Number(slider.value);
+                input.value = slider.value;
+                if (mEqual && meta.name === 'm') syncMEqualParams();
+                updateAll();
+            };
+            input.oninput = () => {
+                if (mEqual && (meta.name === 'm1' || meta.name === 'm2')) return;
+                params[meta.name] = Math.max(meta.min, Math.min(meta.max, Number(input.value)));
+                slider.value = params[meta.name];
+                if (mEqual && meta.name === 'm') syncMEqualParams();
+                updateAll();
+            };
+        });
+
+        // Parabola Controls
+        kSlider.oninput = () => {
+            params.k = Number(kSlider.value);
+            kInput.value = params.k.toFixed(2);
+            updateAll();
+        };
+        kInput.oninput = () => {
+            params.k = Math.max(0, Math.min(4, Number(kInput.value)));
+            kSlider.value = params.k;
+            updateAll();
+        };
+
+        // m = m1 = m2 checkbox
+        mEqualCheckbox.onchange = () => {
+            mEqual = mEqualCheckbox.checked;
+            if (mEqual) syncMEqualParams();
+            updateMEqualState();
+            updateAll();
+        };
+
+        // Reset button
+        document.getElementById("reset-btn").onclick = () => {
+            Object.assign(params, defaultParams);
+            paramMeta.forEach(meta => {
+                document.getElementById(`slider-${meta.name}`).value = params[meta.name];
+                document.getElementById(`input-${meta.name}`).value = params[meta.name];
+            });
+            kSlider.value = params.k;
+            kInput.value = params.k;
+            mEqual = true;
+            mEqualCheckbox.checked = true;
+            updateMEqualState();
+            updateAll();
+        };
+    }
+
+    function syncMEqualParams() {
+        params.m1 = params.m2 = params.m;
+        ['m1', 'm2'].forEach(name => {
+            document.getElementById(`slider-${name}`).value = params.m;
+            document.getElementById(`input-${name}`).value = params.m;
+        });
+    }
+
+    function updateMEqualState() {
+        ['m1', 'm2'].forEach(name => {
+            document.getElementById(`slider-${name}`).disabled = mEqual;
+            document.getElementById(`input-${name}`).disabled = mEqual;
+        });
+    }
+
+    // === Chuyển đổi tọa độ ===
+    function toCanvas(x, y) {
+      return [
+        (x - XMIN) / (XMAX - XMIN) * CW,
+        CH - (y - YMIN) / (YMAX - YMIN) * CH
+      ];
+    }
+
+    // === CÁC HÀM VẼ ===
+    function drawAxes() {
+      ctx.save();
+      ctx.clearRect(0, 0, CW, CH);
+      ctx.strokeStyle = "#e6f0f5";
+      ctx.lineWidth = 1;
+      // Grid
+      for(let gx = Math.ceil(XMIN*10)/10; gx <= XMAX+1e-6; gx += 0.1) {
+          const [x, _] = toCanvas(gx, 0);
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+      }
+      for(let gy = Math.ceil(YMIN*10)/10; gy <= YMAX+1e-6; gy += 0.2) {  // Đã thay đổi từ 0.1 lên 0.2
+          const [_, y] = toCanvas(0, gy);
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+      }
+      // Axes
+      ctx.strokeStyle = "#2d3758";
+      ctx.lineWidth = 2.2;
+      let [x0, y0] = toCanvas(XMIN, 0); let [x1, y1] = toCanvas(XMAX, 0);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      [x0, y0] = toCanvas(0, YMIN); [x1, y1] = toCanvas(0, YMAX);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      // Labels
+      ctx.fillStyle = "#2d3758"; ctx.font = "13px Arial";
+      for(let x = 0; x <= XMAX+1e-8; x += 0.2) {
+          if (x < XMIN-1e-8) continue;
+          const [cx,cy] = toCanvas(x,-0.05); ctx.fillText(x.toFixed(1), cx-10, cy+18);
+      }
+      for(let y = 0; y <= YMAX+1e-8; y += 0.2) {  // Đã thay đổi từ 0.1 lên 0.2
+          if (y < YMIN-1e-8) continue;
+          const [cx,cy] = toCanvas(-0.05,y); ctx.fillText(y.toFixed(1), cx-28, cy+5);
+      }
+      ctx.restore();
+    }
+    
+    // --- VẼ ATTRACTOR ---
+    function drawIFS({m, m1, m2, n, h}, numIter = 80000, warmup = 18) {
+      const a = 0.5, c = m1/2, b = (n - 0.5)/m, d = (h - m1/2)/m;
+      const p = -0.5, r = m2/2, q = (-n + 0.5)/m, s = (h - m2/2)/m;
+      const f1 = ([x, y]) => [a*x + b*y, c*x + d*y];
+      const f2 = ([x, y]) => [p*x + q*y + 1, r*x + s*y];
+
+      let x = Math.random()*(XMAX-XMIN) + XMIN, y = Math.random()*(YMAX-YMIN) + YMIN;
+      ctx.save();
+      ctx.globalAlpha = 0.76;
+      const sz = 1.5;
+      for(let i=0; i<numIter; ++i){
+        const fidx = Math.random()<0.5 ? 0 : 1;
+        [x, y] = (fidx === 0 ? f1([x,y]) : f2([x,y]));
+        if(i > warmup){
+          const [cx, cy] = toCanvas(x, y);
+          ctx.fillStyle = (fidx === 0 ? "#2eba52" : "#ff2121");
+          ctx.fillRect(cx, cy, sz, sz);
+        }
+      }
+      ctx.restore();
+    }
+
+    // --- VẼ PARABOL ---
+    function drawParabola(k) {
+        ctx.save();
+        ctx.strokeStyle = '#0077b6';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const startX = 0;
+        const endX = 1;
+        const plotStep = 0.01;
+        ctx.moveTo(...toCanvas(startX, k * startX * (1 - startX)));
+        for(let x = startX + plotStep; x <= endX; x += plotStep) {
+            const y = k * x * (1 - x);
+            ctx.lineTo(...toCanvas(x, y));
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // === CÁC HÀM TÍNH TOÁN ===
+    function maxSingularValue2x2(a, b, c, d) {
+      const S = a*a + b*b + c*c + d*d, P = (a*d - b*c)**2, D = S*S - 4*P;
+      return Math.sqrt(0.5 * (S + Math.sqrt(Math.max(0, D))));
+    }
+
+    function calcHausdorffDim({m, m1, m2, n, h}) {
+      const a1 = 0.5, b1 = (n-0.5)/m, c1 = m1/2, d1 = (h-m1/2)/m;
+      const p2 = -0.5, q2 = (-n+0.5)/m, r2 = m2/2, s2 = (h-m2/2)/m;
+      const sigma1 = maxSingularValue2x2(a1, b1, c1, d1);
+      const sigma2 = maxSingularValue2x2(p2, q2, r2, s2);
+      if (sigma1 <= 0 || sigma2 <= 0 || !isFinite(sigma1) || !isFinite(sigma2)) return "–";
+      let l = 0.01, r = 2.0, mid;
+      for (let i = 0; i < 50; ++i) {
+        mid = (l + r) / 2;
+        const val = Math.pow(sigma1, mid) + Math.pow(sigma2, mid) - 1;
+        if (Math.abs(val) < 1e-7) break; (val > 0) ? l = mid : r = mid;
+      }
+      return Math.max(0, Math.min(2, mid)).toFixed(4);
+    }
+
+    function getAffineFormula({m, m1, m2, n, h}) {
+      const tex = v => (Math.abs(v) < 1e-7) ? '0' : (Math.round(v * 1000) / 1000).toString();
+      const a1 = 0.5, c1 = m1/2, b1 = (n-0.5)/m, d1 = (h-m1/2)/m;
+      const p2 = -0.5, r2 = m2/2, q2 = (-n+0.5)/m, s2 = (h-m2/2)/m;
+      const f1 = `f_1(\\mathbf{x}) = \\begin{bmatrix}${tex(a1)} & ${tex(b1)} \\\\ ${tex(c1)} & ${tex(d1)}\\end{bmatrix}\\mathbf{x}`;
+      const f2 = `f_2(\\mathbf{x}) = \\begin{bmatrix}${tex(p2)} & ${tex(q2)} \\\\ ${tex(r2)} & ${tex(s2)}\\end{bmatrix}\\mathbf{x} + \\begin{bmatrix}1 \\\\ 0\\end{bmatrix}`;
+      return `\\[ \\begin{aligned} &${f1} \\\\[7pt] &${f2} \\end{aligned} \\]`;
+    }
+
+    function getGeneralFormula() {
+      return String.raw`\[
+        \begin{aligned} 
+        &f_1(\mathbf{x}) = \begin{bmatrix}\frac{1}{2} & \frac{n-0.5}{m} \\ \frac{m_1}{2} & \frac{h-0.5m_1}{m}\end{bmatrix}\mathbf{x} \\[7pt] 
+        &f_2(\mathbf{x}) = \begin{bmatrix}-\frac{1}{2} & \frac{-n+0.5}{m} \\ \frac{m_2}{2} & \frac{h-0.5m_2}{m}\end{bmatrix}\mathbf{x} + \begin{bmatrix}1 \\ 0\end{bmatrix} 
+        \end{aligned}
+      \]`;
+    }
+    
+    // --- HÀM CẬP NHẬT TỔNG THỂ ---
+    function updateAll() {
+      drawAxes();
+      drawIFS(params);
+      drawParabola(params.k);
+      
+      document.getElementById("hausdorff-dim").textContent = calcHausdorffDim(params);
+      document.getElementById("formula-general").innerHTML = getGeneralFormula();
+      document.getElementById("formula-mathjax").innerHTML = getAffineFormula(params);
+      if (window.MathJax) window.MathJax.typesetPromise();
+    }
+
+    // --- KHỞI TẠO ---
+    setupEventListeners();
+    updateMEqualState();
+    updateAll();
+  </script>
+</body>
+</html>
