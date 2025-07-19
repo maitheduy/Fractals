@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attractor của hệ hàm lặp</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+        }
+        canvas {
+            border: 1px solid #333;
+            background-color: white;
+            margin-top: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .info {
+            margin-top: 20px;
+            max-width: 800px;
+            text-align: center;
+            color: #555;
+        }
+        .math-container {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+            margin: 10px 0;
+        }
+        .progress-container {
+            width: 300px;
+            height: 20px;
+            background-color: #ddd;
+            border-radius: 10px;
+            margin-left: 20px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .counter {
+            margin-left: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Attractor của hệ hàm lặp</h1>
+    <div class="controls">
+        <button id="startBtn">Bắt đầu</button>
+        <button id="resetBtn">Làm mới</button>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="counter" id="pointCounter">0 điểm</div>
+    </div>
+    <canvas id="fractalCanvas" width="800" height="800"></canvas>
+    
+    <div class="info">
+        <div class="math-container">
+            <p>Hệ hàm co được sử dụng:</p>
+            <p>
+                \[
+                f_1\left(\begin{bmatrix} x \\ y \end{bmatrix}\right) = 
+                \begin{bmatrix}
+                0.5 & 0 \\
+                0.25 & -1
+                \end{bmatrix}
+                \begin{bmatrix} x \\ y \end{bmatrix}
+                \quad \text{(Màu xanh lá)}
+                \]
+            </p>
+            <p>
+                \[
+                f_2\left(\begin{bmatrix} x \\ y \end{bmatrix}\right) = 
+                \begin{bmatrix}
+                -0.5 & 0 \\
+                0.25 & -1
+                \end{bmatrix}
+                \begin{bmatrix} x \\ y \end{bmatrix} + 
+                \begin{bmatrix}
+                1 \\
+                0
+                \end{bmatrix}
+                \quad \text{(Màu đỏ)}
+                \]
+            </p>
+        </div>
+        <p>Thuật toán Chaos Game được sử dụng để vẽ attractor.</p>
+        <p>Kích thước điểm: 2.5px | Số điểm ban đầu: 800,000 | Tự động tăng theo thời gian</p>
+    </div>
+
+    <script>
+        // Lấy các phần tử DOM
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const progressBar = document.getElementById('progressBar');
+        const pointCounter = document.getElementById('pointCounter');
+
+        // Kích thước canvas
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Cấu hình
+        const INITIAL_POINTS = 800000;  // Số điểm ban đầu
+        const POINT_SIZE = 2.5;         // Kích thước điểm (gấp 2.5 lần)
+        const BATCH_SIZE = 10000;       // Số điểm vẽ mỗi batch
+        const BATCH_DELAY = 10;         // Thời gian delay giữa các batch (ms)
+
+        // Định nghĩa các hàm biến đổi
+        const transforms = [
+            // f1(x) - màu xanh lá (#00cc00)
+            {
+                func: function(x, y) {
+                    return {
+                        x: 0.5 * x,
+                        y: 0.25 * x - y
+                    };
+                },
+                color: '#00cc00'
+            },
+            // f2(x) - màu đỏ (#ff0000)
+            {
+                func: function(x, y) {
+                    return {
+                        x: -0.5 * x + 1,
+                        y: 0.25 * x - y
+                    };
+                },
+                color: '#ff0000'
+            }
+        ];
+
+        // Xác suất cho mỗi phép biến đổi
+        const probabilities = [0.5, 0.5];
+
+        // Biến trạng thái
+        let point = { x: Math.random(), y: Math.random() };
+        let isRunning = false;
+        let animationId = null;
+        let totalPoints = 0;
+        let pointsDrawn = 0;
+        let targetPoints = INITIAL_POINTS;
+
+        // Hàm vẽ một điểm
+        function drawPoint(x, y, color) {
+            // Chuyển đổi tọa độ từ [-1,1]x[-1,1] sang tọa độ canvas
+            const canvasX = width / 2 + x * width / 2.5;
+            const canvasY = height / 2 - y * height / 2.5;
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(canvasX, canvasY, POINT_SIZE, POINT_SIZE);
+        }
+
+        // Hàm vẽ lưới và trục tọa độ
+        function drawGridAndAxes() {
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 0.5;
+            
+            // Vẽ lưới
+            const step = width / 20; // 20 ô mỗi chiều
+            for (let i = 0; i <= width; i += step) {
+                // Đường dọc
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, height);
+                ctx.stroke();
+                
+                // Đường ngang
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(width, i);
+                ctx.stroke();
+            }
+            
+            // Vẽ trục tọa độ đậm hơn
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+            
+            // Trục x
+            ctx.beginPath();
+            ctx.moveTo(0, height/2);
+            ctx.lineTo(width, height/2);
+            ctx.stroke();
+            
+            // Trục y
+            ctx.beginPath();
+            ctx.moveTo(width/2, 0);
+            ctx.lineTo(width/2, height);
+            ctx.stroke();
+            
+            // Đánh dấu trục và số
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            
+            // Đánh dấu trục x
+            for (let i = -5; i <= 5; i += 0.5) {
+                if (i === 0) continue;
+                const x = width / 2 + i * width / 10;
+                ctx.beginPath();
+                ctx.moveTo(x, height/2 - 5);
+                ctx.lineTo(x, height/2 + 5);
+                ctx.stroke();
+                
+                if (Number.isInteger(i)) {
+                    ctx.fillText(i.toString(), x, height/2 + 10);
+                }
+            }
+            
+            // Đánh dấu trục y
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (let i = -5; i <= 5; i += 0.5) {
+                if (i === 0) continue;
+                const y = height / 2 - i * height / 10;
+                ctx.beginPath();
+                ctx.moveTo(width/2 - 5, y);
+                ctx.lineTo(width/2 + 5, y);
+                ctx.stroke();
+                
+                if (Number.isInteger(i)) {
+                    ctx.fillText(i.toString(), width/2 - 10, y);
+                }
+            }
+            
+            // Ghi nhãn trục
+            ctx.textAlign = 'center';
+            ctx.fillText('x', width - 10, height/2 + 20);
+            ctx.textAlign = 'right';
+            ctx.fillText('y', width/2 - 10, 10);
+        }
+
+        // Hàm thực hiện một batch điểm
+        function drawBatch() {
+            for (let i = 0; i < BATCH_SIZE; i++) {
+                // Chọn ngẫu nhiên một phép biến đổi theo xác suất
+                const r = Math.random();
+                let sum = 0;
+                let transformIndex = 0;
+                
+                for (let j = 0; j < probabilities.length; j++) {
+                    sum += probabilities[j];
+                    if (r <= sum) {
+                        transformIndex = j;
+                        break;
+                    }
+                }
+                
+                // Áp dụng phép biến đổi
+                const transform = transforms[transformIndex];
+                const newPoint = transform.func(point.x, point.y);
+                
+                point = newPoint;
+                drawPoint(point.x, point.y, transform.color);
+                
+                pointsDrawn++;
+                totalPoints++;
+            }
+
+            // Cập nhật UI
+            updateProgress();
+
+            // Tiếp tục nếu chưa đạt đủ số điểm hoặc đang chạy
+            if (pointsDrawn < targetPoints && isRunning) {
+                animationId = setTimeout(drawBatch, BATCH_DELAY);
+            } else if (isRunning) {
+                // Tăng số điểm mục tiêu để tiếp tục vẽ
+                targetPoints += BATCH_SIZE;
+                animationId = setTimeout(drawBatch, BATCH_DELAY);
+            }
+        }
+
+        // Hàm cập nhật thanh tiến trình và bộ đếm
+        function updateProgress() {
+            const progress = Math.min(100, (pointsDrawn / targetPoints) * 100);
+            progressBar.style.width = `${progress}%`;
+            pointCounter.textContent = `${totalPoints.toLocaleString()} điểm`;
+        }
+
+        // Hàm bắt đầu/quá trình vẽ
+        function startDrawing() {
+            if (!isRunning) {
+                isRunning = true;
+                startBtn.textContent = 'Dừng';
+                pointsDrawn = 0;
+                drawBatch();
+            } else {
+                isRunning = false;
+                startBtn.textContent = 'Tiếp tục';
+                clearTimeout(animationId);
+            }
+        }
+
+        // Hàm làm mới canvas
+        function resetCanvas() {
+            isRunning = false;
+            clearTimeout(animationId);
+            startBtn.textContent = 'Bắt đầu';
+            ctx.clearRect(0, 0, width, height);
+            point = { x: Math.random(), y: Math.random() };
+            totalPoints = 0;
+            pointsDrawn = 0;
+            targetPoints = INITIAL_POINTS;
+            updateProgress();
+            drawGridAndAxes();
+        }
+
+        // Thêm sự kiện cho các nút
+        startBtn.addEventListener('click', startDrawing);
+        resetBtn.addEventListener('click', resetCanvas);
+
+        // Khởi tạo ban đầu
+        resetCanvas();
+
+        // Render MathJax
+        MathJax.typeset();
+    </script>
+</body>
+</html>
