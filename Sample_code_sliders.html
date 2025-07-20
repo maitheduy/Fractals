@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attractor với tham số điều chỉnh</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            background-color: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .left-panel {
+            width: calc(50% - 30px); /* Giảm 3cm (khoảng 30px) */
+            padding: 20px;
+            background-color: white;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+        .right-panel {
+            width: calc(50% + 30px); /* Tăng tương ứng */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+        canvas {
+            border: 1px solid #333;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            max-width: 100%;
+            max-height: calc(100vh - 120px);
+        }
+        h1 {
+            color: #333;
+            font-size: 1.5em;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider {
+            flex-grow: 1;
+        }
+        .value-input {
+            width: 80px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .math-container {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        .math-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .formula-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow-x: auto;
+        }
+        .formula-label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .controls-section {
+            margin-bottom: 20px;
+            background-color: #f0f8ff;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #d0e3ff;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 700px;
+        }
+        #fractalCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #coordinate-system {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .grid-line {
+            position: absolute;
+            background-color: rgba(0,0,0,0.1);
+        }
+        .axis {
+            position: absolute;
+            background-color: #333;
+        }
+        .axis-label {
+            position: absolute;
+            font-size: 10px;
+            color: #333;
+        }
+        .major-tick {
+            position: absolute;
+            background-color: rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="left-panel">
+        <div class="math-container">
+            <div class="math-title">Hệ hàm lặp:</div>
+            <div class="formula-row">
+                <span class="formula-label">f₁(x,y) =</span>
+                \[
+                \begin{bmatrix}
+                \frac{1}{2} & \frac{n - \frac{1}{2}}{m} \\
+                \frac{m}{2} & \frac{h - \frac{m}{2}}{m}
+                \end{bmatrix}
+                \begin{bmatrix} x \\ y \end{bmatrix}
+                +
+                \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+                \]
+            </div>
+            <div class="formula-row">
+                <span class="formula-label">f₂(x,y) =</span>
+                \[
+                \begin{bmatrix}
+                -\frac{1}{2} & \frac{n + \frac{1}{2}}{m} \\
+                \frac{m}{2} & \frac{h - \frac{m}{2}}{m}
+                \end{bmatrix}
+                \begin{bmatrix} x \\ y \end{bmatrix}
+                +
+                \begin{bmatrix} 1 \\ 0 \end{bmatrix}
+                \]
+            </div>
+        </div>
+        
+        <div class="controls-section">
+            <h1>Điều khiển Tham số</h1>
+            
+            <div class="control-group">
+                <label class="control-label" for="mSlider">Tham số m:</label>
+                <div class="slider-container">
+                    <input type="range" id="mSlider" class="slider" min="-2" max="2" step="0.01" value="0.5">
+                    <input type="number" id="mValue" class="value-input" value="0.5" step="0.01">
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-label" for="nSlider">Tham số n:</label>
+                <div class="slider-container">
+                    <input type="range" id="nSlider" class="slider" min="-2" max="2" step="0.01" value="0.5">
+                    <input type="number" id="nValue" class="value-input" value="0.5" step="0.01">
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label class="control-label" for="hSlider">Tham số h:</label>
+                <div class="slider-container">
+                    <input type="range" id="hSlider" class="slider" min="-2" max="2" step="0.01" value="-0.25">
+                    <input type="number" id="hValue" class="value-input" value="-0.25" step="0.01">
+                </div>
+            </div>
+        </div>
+        
+        <div class="math-container" id="dynamicMath">
+            <div class="math-title">Công thức hiện tại:</div>
+            <div class="formula-row">
+                <span class="formula-label">f₁ =</span>
+                <span id="f1Formula">Đang tính toán...</span>
+            </div>
+            <div class="formula-row">
+                <span class="formula-label">f₂ =</span>
+                <span id="f2Formula">Đang tính toán...</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="right-panel">
+        <h1>Hình ảnh Attractor</h1>
+        <div id="canvas-container">
+            <canvas id="fractalCanvas" width="700" height="700"></canvas>
+            <div id="coordinate-system"></div>
+        </div>
+    </div>
+
+    <script>
+        // Lấy các phần tử DOM
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const coordinateSystem = document.getElementById('coordinate-system');
+        
+        // Các slider và input
+        const mSlider = document.getElementById('mSlider');
+        const mValue = document.getElementById('mValue');
+        const nSlider = document.getElementById('nSlider');
+        const nValue = document.getElementById('nValue');
+        const hSlider = document.getElementById('hSlider');
+        const hValue = document.getElementById('hValue');
+        
+        // Các phần tử hiển thị công thức
+        const f1Formula = document.getElementById('f1Formula');
+        const f2Formula = document.getElementById('f2Formula');
+
+        // Kích thước canvas
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Cấu hình
+        const POINTS = 80000;
+        const POINT_SIZE = 1.5;
+        let animationId = null;
+
+        // Vẽ hệ trục tọa độ và lưới
+        function drawCoordinateSystem() {
+            coordinateSystem.innerHTML = '';
+            
+            // Tính toán bước nhảy (0.1 đơn vị = width/40)
+            const step = width / 40;
+            
+            // Vẽ lưới (bước 0.1)
+            for (let i = 0; i <= width; i += step) {
+                // Lưới dọc
+                const vGrid = document.createElement('div');
+                vGrid.className = 'grid-line';
+                vGrid.style.left = i + 'px';
+                vGrid.style.top = '0';
+                vGrid.style.width = '1px';
+                vGrid.style.height = height + 'px';
+                coordinateSystem.appendChild(vGrid);
+                
+                // Lưới ngang
+                const hGrid = document.createElement('div');
+                hGrid.className = 'grid-line';
+                hGrid.style.left = '0';
+                hGrid.style.top = i + 'px';
+                hGrid.style.width = width + 'px';
+                hGrid.style.height = '1px';
+                coordinateSystem.appendChild(hGrid);
+            }
+            
+            // Tạo trục x
+            const xAxis = document.createElement('div');
+            xAxis.className = 'axis';
+            xAxis.style.width = width + 'px';
+            xAxis.style.height = '2px';
+            xAxis.style.left = '0';
+            xAxis.style.top = (height/2) + 'px';
+            coordinateSystem.appendChild(xAxis);
+            
+            // Tạo trục y
+            const yAxis = document.createElement('div');
+            yAxis.className = 'axis';
+            yAxis.style.width = '2px';
+            yAxis.style.height = height + 'px';
+            yAxis.style.left = (width/2) + 'px';
+            yAxis.style.top = '0';
+            coordinateSystem.appendChild(yAxis);
+            
+            // Vẽ các vạch chia chính (0.5 đơn vị) và nhãn
+            for (let x = -2; x <= 2; x += 0.5) {
+                const pixelX = width/2 + x * width/4;
+                
+                // Vạch chia chính
+                const tick = document.createElement('div');
+                tick.className = 'major-tick';
+                tick.style.width = '1px';
+                tick.style.height = '10px';
+                tick.style.left = pixelX + 'px';
+                tick.style.top = (height/2 - 5) + 'px';
+                coordinateSystem.appendChild(tick);
+                
+                // Nhãn
+                if (x !== 0) {
+                    const label = document.createElement('div');
+                    label.className = 'axis-label';
+                    label.textContent = x;
+                    label.style.left = (pixelX - 10) + 'px';
+                    label.style.top = (height/2 + 10) + 'px';
+                    coordinateSystem.appendChild(label);
+                }
+            }
+            
+            // Vẽ các vạch chia chính và nhãn trên trục y
+            for (let y = -2; y <= 2; y += 0.5) {
+                const pixelY = height/2 - y * height/4;
+                
+                // Vạch chia chính
+                const tick = document.createElement('div');
+                tick.className = 'major-tick';
+                tick.style.width = '10px';
+                tick.style.height = '1px';
+                tick.style.left = (width/2 - 5) + 'px';
+                tick.style.top = pixelY + 'px';
+                coordinateSystem.appendChild(tick);
+                
+                // Nhãn
+                if (y !== 0) {
+                    const label = document.createElement('div');
+                    label.className = 'axis-label';
+                    label.textContent = y;
+                    label.style.left = (width/2 + 15) + 'px';
+                    label.style.top = (pixelY - 8) + 'px';
+                    coordinateSystem.appendChild(label);
+                }
+            }
+            
+            // Nhãn trục
+            const xLabel = document.createElement('div');
+            xLabel.className = 'axis-label';
+            xLabel.textContent = 'x';
+            xLabel.style.fontWeight = 'bold';
+            xLabel.style.left = (width - 15) + 'px';
+            xLabel.style.top = (height/2 - 20) + 'px';
+            coordinateSystem.appendChild(xLabel);
+            
+            const yLabel = document.createElement('div');
+            yLabel.className = 'axis-label';
+            yLabel.textContent = 'y';
+            yLabel.style.fontWeight = 'bold';
+            yLabel.style.left = (width/2 + 15) + 'px';
+            yLabel.style.top = '10px';
+            coordinateSystem.appendChild(yLabel);
+        }
+
+        // Kết nối slider và input
+        function connectSliderInput(slider, input, updateFunction) {
+            const handler = () => {
+                input.value = slider.value;
+                updateFunction();
+            };
+            slider.addEventListener('input', handler);
+            input.addEventListener('input', () => {
+                slider.value = input.value;
+                updateFunction();
+            });
+            return handler;
+        }
+
+        // Cập nhật công thức hiển thị
+        function updateFormulas() {
+            const m = parseFloat(mValue.value);
+            const n = parseFloat(nValue.value);
+            const h = parseFloat(hValue.value);
+            
+            // Tính các phần tử ma trận
+            const f1_a12 = ((n - 0.5)/m).toFixed(3);
+            const f1_a21 = (m/2).toFixed(3);
+            const f1_a22 = ((h - m/2)/m).toFixed(3);
+            
+            const f2_a12 = ((n + 0.5)/m).toFixed(3);
+            const f2_a21 = (m/2).toFixed(3);
+            const f2_a22 = ((h - m/2)/m).toFixed(3);
+            
+            // Cập nhật công thức
+            f1Formula.innerHTML = `
+                \\[
+                \\begin{bmatrix}
+                0.5 & ${f1_a12} \\\\
+                ${f1_a21} & ${f1_a22}
+                \\end{bmatrix}
+                \\begin{bmatrix} x \\\\ y \\end{bmatrix}
+                +
+                \\begin{bmatrix} 0 \\\\ 0 \\end{bmatrix}
+                \\]
+            `;
+            
+            f2Formula.innerHTML = `
+                \\[
+                \\begin{bmatrix}
+                -0.5 & ${f2_a12} \\\\
+                ${f2_a21} & ${f2_a22}
+                \\end{bmatrix}
+                \\begin{bmatrix} x \\\\ y \\end{bmatrix}
+                +
+                \\begin{bmatrix} 1 \\\\ 0 \\end{bmatrix}
+                \\]
+            `;
+            
+            // Render lại MathJax
+            MathJax.typeset();
+        }
+
+        // Hàm vẽ một điểm
+        function drawPoint(x, y, color) {
+            const canvasX = width / 2 + x * width / 4;
+            const canvasY = height / 2 - y * height / 4;
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(canvasX, canvasY, POINT_SIZE, POINT_SIZE);
+        }
+
+        // Hàm vẽ attractor
+        function drawAttractor() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            const m = parseFloat(mValue.value);
+            const n = parseFloat(nValue.value);
+            const h = parseFloat(hValue.value);
+            
+            if (Math.abs(m) < 0.001) {
+                alert("Giá trị m không thể bằng 0!");
+                return;
+            }
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            const transforms = [
+                {
+                    func: function(x, y) {
+                        return {
+                            x: 0.5 * x + ((n - 0.5)/m) * y + 0,
+                            y: (m/2) * x + ((h - m/2)/m) * y + 0
+                        };
+                    },
+                    color: '#00cc00'
+                },
+                {
+                    func: function(x, y) {
+                        return {
+                            x: -0.5 * x + ((n + 0.5)/m) * y + 1,
+                            y: (m/2) * x + ((h - m/2)/m) * y + 0
+                        };
+                    },
+                    color: '#ff0000'
+                }
+            ];
+            
+            const probabilities = [0.5, 0.5];
+            let point = { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
+            let pointsDrawn = 0;
+            
+            function drawBatch() {
+                const batchSize = 1000;
+                for (let i = 0; i < batchSize && pointsDrawn < POINTS; i++) {
+                    const r = Math.random();
+                    let sum = 0;
+                    let transformIndex = 0;
+                    
+                    for (let j = 0; j < probabilities.length; j++) {
+                        sum += probabilities[j];
+                        if (r <= sum) {
+                            transformIndex = j;
+                            break;
+                        }
+                    }
+                    
+                    const transform = transforms[transformIndex];
+                    const newPoint = transform.func(point.x, point.y);
+                    
+                    point = newPoint;
+                    drawPoint(point.x, point.y, transform.color);
+                    
+                    pointsDrawn++;
+                }
+                
+                if (pointsDrawn < POINTS) {
+                    animationId = requestAnimationFrame(drawBatch);
+                }
+            }
+            
+            drawBatch();
+            updateFormulas();
+        }
+
+        // Khởi tạo chương trình
+        function init() {
+            drawCoordinateSystem();
+            
+            connectSliderInput(mSlider, mValue, drawAttractor);
+            connectSliderInput(nSlider, nValue, drawAttractor);
+            connectSliderInput(hSlider, hValue, drawAttractor);
+            
+            drawAttractor();
+            MathJax.typeset();
+        }
+
+        // Chạy chương trình
+        init();
+    </script>
+</body>
+</html>
