@@ -1,0 +1,484 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Attractor Vicsek: Hệ 5 hàm vs Hệ 3 hàm rút gọn</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            min-height: 100vh;
+            background-color: #f5f5f5;
+        }
+        
+        .left-panel {
+            width: 30%;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            align-items: center;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+        
+        .canvas-container {
+            margin: 10px;
+            text-align: center;
+        }
+        
+        canvas {
+            border: 1px solid #ccc;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        
+        .formula-box {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .slider-container {
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        label {
+            display: inline-block;
+            width: 100px;
+        }
+        
+        .color-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .color-item {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+        }
+        
+        .color-box {
+            width: 15px;
+            height: 15px;
+            margin-right: 5px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="left-panel">
+        <h1>Attractor Vicsek</h1>
+        
+        <div class="formula-box">
+            <h2>Hệ hàm co IFS cho Attractor Vicsek</h2>
+            <h3>Hệ 5 hàm cổ điển:</h3>
+            \[
+            \begin{aligned}
+            f_1(x,y) &= \left(\frac{x}{3}, \frac{y}{3}\right) \\
+            f_2(x,y) &= \left(\frac{x}{3} + \frac{2}{3}, \frac{y}{3}\right) \\
+            f_3(x,y) &= \left(\frac{x}{3}, \frac{y}{3} + \frac{2}{3}\right) \\
+            f_4(x,y) &= \left(\frac{x}{3} + \frac{2}{3}, \frac{y}{3} + \frac{2}{3}\right) \\
+            f_5(x,y) &= \left(\frac{x}{3} + \frac{1}{3}, \frac{y}{3} + \frac{1}{3}\right)
+            \end{aligned}
+            \]
+            
+            <h3>Hệ 3 hàm rút gọn:</h3>
+            \[
+            \begin{aligned}
+            g_1(x,y) &= \left(\frac{x}{3}, \frac{y}{3}\right) \\
+            g_2(x,y) &= \left(\frac{x}{3} + \frac{1}{3}, \frac{y}{3} + \frac{1}{3}\right) \\
+            g_3(x,y) &= \left( -y + 1, x \right)
+            \end{aligned}
+            \]
+            <p>Với xác suất: \( P(g_1) = \frac{1 - p}{2} \), \( P(g_2) = \frac{1 - p}{2} \), \( P(g_3) = p \), trong đó \( p \) được điều chỉnh bởi slider.</p>
+            <p>Trong đó, \( g_1 \) và \( g_2 \) là các phép co, \( g_3 \) là phép quay 90° quanh tâm \( (0.5, 0.5) \).</p>
+        </div>
+        
+        <div class="controls">
+            <h2>Điều khiển</h2>
+            <button id="start-btn">Bắt đầu cả hai</button>
+            <button id="reset-btn">Làm mới</button>
+            <button id="start-classic-btn">Chỉ hệ 5 hàm</button>
+            <button id="start-reduced-btn">Chỉ hệ 3 hàm</button>
+            
+            <div class="slider-container">
+                <label for="iterations">Số lần lặp:</label>
+                <input type="range" id="iterations" min="1000" max="100000" value="20000" step="1000">
+                <span id="iterations-value">20,000</span>
+            </div>
+            
+            <div class="slider-container">
+                <label for="point-size">Kích thước điểm:</label>
+                <input type="range" id="point-size" min="1" max="5" value="1" step="1">
+                <span id="point-size-value">1</span>
+            </div>
+            
+            <div class="slider-container">
+                <label for="prob-g3">Xác suất g₃ (p):</label>
+                <input type="range" id="prob-g3" min="0" max="1" value="0.75" step="0.01">
+                <span id="prob-g3-value">0.75</span>
+            </div>
+            
+            <div class="color-legend">
+                <h3>Chú thích màu:</h3>
+                <div class="color-item"><div class="color-box" style="background-color: #00FF00;"></div>f₁ (Xanh lá)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #FF0000;"></div>f₂ (Đỏ)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #800080;"></div>f₃ (Tím)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #FFFF00;"></div>f₄ (Vàng)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #FFA500;"></div>f₅ (Cam)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #3498db;"></div>g₁ (Xanh dương)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #FF69B4;"></div>g₂ (Hồng)</div>
+                <div class="color-item"><div class="color-box" style="background-color: #00CED1;"></div>g₃ (Xanh lam)</div>
+            </div>
+        </div>
+        
+    </div>
+    
+    <div class="right-panel">
+        <div class="canvas-container">
+            <h3>Hệ 5 hàm cổ điển</h3>
+            <canvas id="classic-canvas" width="400" height="400"></canvas>
+            <div id="classic-status">Chưa chạy</div>
+        </div>
+        
+        <div class="canvas-container">
+            <h3>Hệ 3 hàm rút gọn</h3>
+            <canvas id="reduced-canvas" width="400" height="400"></canvas>
+            <div id="reduced-status">Sẵn sàng (di chuyển slider để vẽ)</div>
+        </div>
+    </div>
+
+    <script>
+        // Lấy các phần tử DOM
+        const classicCanvas = document.getElementById('classic-canvas');
+        const classicCtx = classicCanvas.getContext('2d');
+        const reducedCanvas = document.getElementById('reduced-canvas');
+        const reducedCtx = reducedCanvas.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const startClassicBtn = document.getElementById('start-classic-btn');
+        const startReducedBtn = document.getElementById('start-reduced-btn');
+        const iterationsSlider = document.getElementById('iterations');
+        const iterationsValue = document.getElementById('iterations-value');
+        const pointSizeSlider = document.getElementById('point-size');
+        const pointSizeValue = document.getElementById('point-size-value');
+        const probG3Slider = document.getElementById('prob-g3');
+        const probG3Value = document.getElementById('prob-g3-value');
+        const classicStatus = document.getElementById('classic-status');
+        const reducedStatus = document.getElementById('reduced-status');
+        
+        // Các tham số
+        let iterations = 20000;
+        let pointSize = 1;
+        let probG3 = 0.75;
+        let isDrawingClassic = false;
+        let isDrawingReduced = false;
+        let animationIdClassic = null;
+        let animationIdReduced = null;
+        
+        // Hệ 5 hàm co cổ điển cho attractor Vicsek
+        const classicFunctions = [
+            { func: (x, y) => ({ x: x / 3, y: y / 3 }), color: '#00FF00' },               // f1
+            { func: (x, y) => ({ x: x / 3 + 2/3, y: y / 3 }), color: '#FF0000' },         // f2
+            { func: (x, y) => ({ x: x / 3, y: y / 3 + 2/3 }), color: '#800080' },         // f3
+            { func: (x, y) => ({ x: x / 3 + 2/3, y: y / 3 + 2/3 }), color: '#FFFF00' },   // f4
+            { func: (x, y) => ({ x: x / 3 + 1/3, y: y / 3 + 1/3 }), color: '#FFA500' }    // f5
+        ];
+        
+        // Hệ 3 hàm co rút gọn
+        const reducedFunctions = [
+            { func: (x, y) => ({ x: x / 3, y: y / 3 }), color: '#3498db' },           // g1
+            { func: (x, y) => ({ x: x / 3 + 1/3, y: y / 3 + 1/3 }), color: '#FF69B4' }, // g2
+            { func: (x, y) => ({ x: -y + 1, y: x }), color: '#00CED1' }              // g3
+        ];
+        
+        // Cập nhật hiển thị giá trị slider
+        iterationsSlider.addEventListener('input', () => {
+            iterations = parseInt(iterationsSlider.value);
+            iterationsValue.textContent = iterations.toLocaleString();
+        });
+        
+        pointSizeSlider.addEventListener('input', () => {
+            pointSize = parseInt(pointSizeSlider.value);
+            pointSizeValue.textContent = pointSize;
+        });
+        
+        probG3Slider.addEventListener('input', () => {
+            probG3 = parseFloat(probG3Slider.value);
+            probG3Value.textContent = probG3.toFixed(2);
+            // *** CẬP NHẬT: Tự động vẽ lại khi trượt slider ***
+            if (animationIdReduced) {
+                cancelAnimationFrame(animationIdReduced);
+                isDrawingReduced = false;
+            }
+            chaosGameReduced();
+        });
+        
+        // Hàm chuyển đổi tọa độ toán học [0,1]x[0,1] sang tọa độ canvas
+        function toCanvasCoords(x, y, canvas) {
+            return {
+                x: x * canvas.width,
+                y: canvas.height - (y * canvas.height)
+            };
+        }
+        
+        // Hàm vẽ một điểm lên canvas
+        function drawPoint(x, y, ctx, canvas, size, color) {
+            const coords = toCanvasCoords(x, y, canvas);
+            ctx.fillStyle = color;
+            ctx.fillRect(coords.x, coords.y, size, size);
+        }
+        
+        // Hàm xóa canvas
+        function clearCanvas(ctx, canvas) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // *** CẬP NHẬT: Hàm vẽ lưới tọa độ chi tiết ***
+        function drawGridAndLabels(ctx, canvas) {
+            clearCanvas(ctx, canvas);
+            const step = 0.1;
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 0.5;
+            ctx.font = '10px Arial';
+            ctx.fillStyle = '#7f8c8d';
+
+            // Vẽ lưới dọc và nhãn trục X
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for (let i = 1; i < 10; i++) {
+                const x = (i * step) * canvas.width;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+                ctx.fillText((i * step).toFixed(1), x, 5);
+            }
+             ctx.fillText("1.0", canvas.width - 10, 5);
+
+
+            // Vẽ lưới ngang và nhãn trục Y
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            for (let i = 1; i < 10; i++) {
+                const y = canvas.height - (i * step) * canvas.height;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+                ctx.fillText((i * step).toFixed(1), 5, y);
+            }
+            ctx.fillText("1.0", 5, 10);
+
+            // Vẽ khung bao
+            ctx.strokeStyle = '#a0a0a0';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Hàm chọn hàm co dựa trên xác suất (cho hệ rút gọn)
+        function chooseFunctionReduced(functions, p) {
+            const rand = Math.random();
+            const probG1G2 = (1 - p) / 2;
+
+            if (rand < probG1G2) {
+                return functions[0]; // g1
+            } else if (rand < 2 * probG1G2) {
+                return functions[1]; // g2
+            } else {
+                return functions[2]; // g3
+            }
+        }
+        
+        // Hàm thực hiện thuật toán Chaos Game cho hệ cổ điển
+        function chaosGameClassic() {
+            if (isDrawingClassic) return;
+            isDrawingClassic = true;
+            startBtn.disabled = true;
+            startClassicBtn.disabled = true;
+            classicStatus.textContent = "Đang vẽ...";
+            
+            let x = 0.5, y = 0.5;
+            drawGridAndLabels(classicCtx, classicCanvas);
+            
+            let drawnPoints = 0;
+            
+            function drawNextBatch() {
+                if (drawnPoints >= iterations) {
+                    isDrawingClassic = false;
+                    startBtn.disabled = isDrawingReduced;
+                    startClassicBtn.disabled = false;
+                    classicStatus.textContent = "Hoàn thành!";
+                    return;
+                }
+                
+                // Vẽ một loạt điểm để tăng hiệu suất
+                for(let i = 0; i < 500 && drawnPoints < iterations; i++, drawnPoints++) {
+                    const { func, color } = classicFunctions[Math.floor(Math.random() * classicFunctions.length)];
+                    const newPoint = func(x, y);
+                    x = newPoint.x;
+                    y = newPoint.y;
+                    drawPoint(x, y, classicCtx, classicCanvas, pointSize, color);
+                }
+                
+                animationIdClassic = requestAnimationFrame(drawNextBatch);
+            }
+            drawNextBatch();
+        }
+        
+        // Hàm thực hiện thuật toán Chaos Game cho hệ rút gọn
+        function chaosGameReduced() {
+            if (isDrawingReduced) return;
+            isDrawingReduced = true;
+            startBtn.disabled = true;
+            startReducedBtn.disabled = true;
+            reducedStatus.textContent = "Đang vẽ...";
+            
+            let x = 0.5, y = 0.5;
+            drawGridAndLabels(reducedCtx, reducedCanvas);
+            
+            let drawnPoints = 0;
+            
+            function drawNextBatch() {
+                if (drawnPoints >= iterations) {
+                    isDrawingReduced = false;
+                    startBtn.disabled = isDrawingClassic;
+                    startReducedBtn.disabled = false;
+                    reducedStatus.textContent = "Hoàn thành!";
+                    return;
+                }
+                
+                // Vẽ một loạt điểm để tăng hiệu suất
+                for(let i = 0; i < 500 && drawnPoints < iterations; i++, drawnPoints++) {
+                    const { func, color } = chooseFunctionReduced(reducedFunctions, probG3);
+                    const newPoint = func(x, y);
+                    x = newPoint.x;
+                    y = newPoint.y;
+                    drawPoint(x, y, reducedCtx, reducedCanvas, pointSize, color);
+                }
+
+                animationIdReduced = requestAnimationFrame(drawNextBatch);
+            }
+            drawNextBatch();
+        }
+        
+        // Sự kiện các nút
+        startBtn.addEventListener('click', () => {
+            chaosGameClassic();
+            chaosGameReduced();
+        });
+        
+        startClassicBtn.addEventListener('click', chaosGameClassic);
+        
+        startReducedBtn.addEventListener('click', chaosGameReduced);
+        
+        resetBtn.addEventListener('click', () => {
+            if (animationIdClassic) cancelAnimationFrame(animationIdClassic);
+            if (animationIdReduced) cancelAnimationFrame(animationIdReduced);
+            
+            isDrawingClassic = false; 
+            isDrawingReduced = false;
+            
+            startBtn.disabled = false; 
+            startClassicBtn.disabled = false; 
+            startReducedBtn.disabled = false;
+            
+            classicStatus.textContent = "Chưa chạy";
+            reducedStatus.textContent = "Sẵn sàng (di chuyển slider để vẽ)";
+            
+            drawGridAndLabels(classicCtx, classicCanvas);
+            drawGridAndLabels(reducedCtx, reducedCanvas);
+        });
+        
+        // Khởi tạo
+        resetBtn.click();
+    </script>
+</body>
+</html>
