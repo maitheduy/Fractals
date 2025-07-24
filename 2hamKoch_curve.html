@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Trực quan hóa IFS: Từ Hình học Cơ sở đến Attractor</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f4f4f9;
+        }
+        .container {
+            display: flex;
+            width: 100%;
+        }
+        .panel {
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .left-panel {
+            width: 450px;
+            background-color: #ffffff;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+        .right-panel {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        canvas {
+            border: 1px solid #b0b0b0;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #333;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+        .control-group span {
+            font-family: monospace;
+            background-color: #e9ecef;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .info-box, .formula-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .info-box p {
+            margin: 8px 0;
+            font-size: 16px;
+            font-family: monospace;
+        }
+        .formula-box {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1890ff;
+            padding: 1px 15px;
+        }
+        button {
+            padding: 10px 15px; border-radius: 4px; cursor: pointer; font-size: 16px;
+            border: none; color: white; margin-right: 10px; margin-top: 5px;
+        }
+        .btn-toggle { background-color: #007bff; }
+        .btn-toggle:hover { background-color: #0069d9; }
+        .btn-reset { background-color: #dc3545; }
+        .btn-reset:hover { background-color: #c82333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="panel left-panel">
+            <h1>Bảng điều khiển IFS</h1>
+            
+            <div class="controls">
+                <h2>Tham số Hình học</h2>
+                <p style="font-style: italic;">Di chuyển sliders để vẽ attractor trực tiếp.</p>
+                <div class="control-group">
+                    <label for="m-slider">Tham số m: <span id="m-value">0.29</span></label>
+                    <input type="range" id="m-slider" min="-1.5" max="1.5" value="0.2887" step="0.0001">
+                </div>
+                <div class="control-group">
+                    <label for="n-slider">Tham số n: <span id="n-value">0.33</span></label>
+                    <input type="range" id="n-slider" min="-0.5" max="1.5" value="0.3333" step="0.0001">
+                </div>
+                <div class="control-group">
+                    <label for="h-slider">Tham số h: <span id="h-value">0.00</span></label>
+                    <input type="range" id="h-slider" min="-1.5" max="1.5" value="0" step="0.01">
+                </div>
+            </div>
+
+             <div class="info-box">
+                <h2>Tọa độ các Điểm</h2>
+                <p id="coord-o"><b>O</b>: (0.00, 0.00)</p>
+                <p id="coord-a"><b>A</b>: (1.00, 0.00)</p>
+                <p id="coord-p" style="color: #e44d26;"><b>P</b>: (0.50, 0.29)</p>
+                <p id="coord-p1" style="color: #2699e4;"><b>P₁</b>: (0.33, 0.00)</p>
+                <p id="coord-p2" style="color: #6a26e4;"><b>P₂</b>: (0.67, 0.00)</p>
+            </div>
+            
+            <div class="formula-box">
+                <h3>Hệ hàm co Cố định (Công thức Tổng quát)</h3>
+                <div id="fixed-matrix-display"></div>
+            </div>
+
+            <div class="formula-box">
+                <h3>Hệ hàm co Động (Giá trị số)</h3>
+                <div id="dynamic-matrix-display"></div>
+            </div>
+
+            <div class="info-box">
+                 <h3>Điều khiển Hiển thị</h3>
+                 <button id="toggle-attractor-btn" class="btn-toggle">Ẩn Attractor</button>
+                 <button id="toggle-geometry-btn" class="btn-toggle">Ẩn Hình học</button>
+                 <button id="reset-btn" class="btn-reset">Làm mới</button>
+                 <p id="attractor-status" style="text-align: center; margin-top: 10px;">Di chuyển slider để bắt đầu</p>
+            </div>
+        </div>
+        
+        <div class="panel right-panel">
+            <canvas id="main-canvas" width="800" height="800"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const mSlider = document.getElementById('m-slider');
+        const nSlider = document.getElementById('n-slider');
+        const hSlider = document.getElementById('h-slider');
+        const mValueSpan = document.getElementById('m-value');
+        const nValueSpan = document.getElementById('n-value');
+        const hValueSpan = document.getElementById('h-value');
+        
+        const coordO = document.getElementById('coord-o');
+        const coordA = document.getElementById('coord-a');
+        const coordP = document.getElementById('coord-p');
+        const coordP1 = document.getElementById('coord-p1');
+        const coordP2 = document.getElementById('coord-p2');
+
+        const fixedMatrixDisplay = document.getElementById('fixed-matrix-display');
+        const dynamicMatrixDisplay = document.getElementById('dynamic-matrix-display');
+        const toggleAttractorBtn = document.getElementById('toggle-attractor-btn');
+        const toggleGeometryBtn = document.getElementById('toggle-geometry-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const attractorStatus = document.getElementById('attractor-status');
+
+        const canvas = document.getElementById('main-canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasSize = 800;
+
+        // Global state
+        const coordBounds = { minX: -0.75, maxX: 1.75, minY: -1.25, maxY: 1.25 };
+        let points = {};
+        let liveDrawingId = null;
+        let isGeometryVisible = true;
+        let isAttractorVisible = true;
+        let attractorPoints = [];
+        
+        function toCanvasCoords(mathX, mathY) {
+            const rangeX = coordBounds.maxX - coordBounds.minX;
+            const rangeY = coordBounds.maxY - coordBounds.minY;
+            const canvasX = ((mathX - coordBounds.minX) / rangeX) * canvasSize;
+            const canvasY = canvasSize - (((mathY - coordBounds.minY) / rangeY) * canvasSize);
+            return { x: canvasX, y: canvasY };
+        }
+
+        function drawGrid(ctx) {
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
+            ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 1;
+            for (let i = -2; i <= 2; i += 0.1) {
+                const x = toCanvasCoords(i, 0).x;
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvasSize); ctx.stroke();
+                const y = toCanvasCoords(0, i).y;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvasSize, y); ctx.stroke();
+            }
+            ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+            const origin = toCanvasCoords(0, 0);
+            ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(canvasSize, origin.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, canvasSize); ctx.stroke();
+        }
+        
+        function drawGeometry(ctx, points) {
+            const O_c = toCanvasCoords(points.O.x, points.O.y);
+            const A_c = toCanvasCoords(points.A.x, points.A.y);
+            const P_c = toCanvasCoords(points.P.x, points.P.y);
+            const P1_c = toCanvasCoords(points.P1.x, points.P1.y);
+            const P2_c = toCanvasCoords(points.P2.x, points.P2.y);
+            
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#e44d26'; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(O_c.x, O_c.y); ctx.lineTo(A_c.x, A_c.y); ctx.lineTo(P_c.x, P_c.y); ctx.closePath(); ctx.stroke();
+            ctx.strokeStyle = '#2699e4'; ctx.setLineDash([5, 5]);
+            ctx.beginPath(); ctx.moveTo(O_c.x, O_c.y); ctx.lineTo(P1_c.x, P1_c.y); ctx.lineTo(P_c.x, P_c.y); ctx.stroke();
+            ctx.strokeStyle = '#6a26e4';
+            ctx.beginPath(); ctx.moveTo(A_c.x, A_c.y); ctx.lineTo(P2_c.x, P2_c.y); ctx.lineTo(P_c.x, P_c.y); ctx.stroke();
+            ctx.setLineDash([]);
+            
+            const pointData = [
+                { p: points.O, name: 'O', color: '#333' }, { p: points.A, name: 'A', color: '#333' },
+                { p: points.P, name: 'P', color: '#e44d26' }, { p: points.P1, name: 'P₁', color: '#2699e4' },
+                { p: points.P2, name: 'P₂', color: '#6a26e4' }
+            ];
+            pointData.forEach(data => {
+                const { x, y } = toCanvasCoords(data.p.x, data.p.y);
+                ctx.beginPath(); ctx.arc(x, y, 6, 0, 2 * Math.PI); ctx.fillStyle = data.color; ctx.fill();
+                ctx.strokeStyle = 'black'; ctx.lineWidth = 1; ctx.stroke();
+                ctx.fillStyle = 'black'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+                ctx.fillText(`${data.name}(${data.p.x.toFixed(2)}, ${data.p.y.toFixed(2)})`, x + 10, y - 10);
+            });
+        }
+        
+        function drawStoredAttractor(ctx, points) {
+            if (points.length === 0) return;
+            for (const p of points) {
+                const { x, y } = toCanvasCoords(p.x, p.y);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(x, y, 1.5, 1.5);
+            }
+        }
+        
+        function calculateIFSFunctions(m, n, h) {
+             if (Math.abs(m) < 1e-9) m = 1e-9; 
+             
+             const v_OA = {x: 1, y: 0};
+             const v_OP = {x: 0.5, y: m};
+             const v_OP1 = {x: n, y: h};
+             const v_AP = {x: -0.5, y: m};
+             const v_AP2 = {x: (1-n)-1, y: h-0}; // AP2 = P2 - A = (1-n,h)-(1,0)
+             
+             // f1(x) = A1*x. Linear map where A1*v_OA = v_OP and A1*v_OP = v_OP1
+             const a1 = v_OP.x;
+             const c1 = v_OP.y;
+             const b1 = (v_OP1.x - a1 * v_OP.x) / v_OP.y;
+             const d1 = (v_OP1.y - c1 * v_OP.x) / v_OP.y;
+             const A1 = [[a1, b1], [c1, d1]];
+             const f1 = (x,y) => ({ x: A1[0][0]*x + A1[0][1]*y, y: A1[1][0]*x + A1[1][1]*y });
+
+             // f2(x) = A2*x + b2. Linear part A2 maps OA->AP, OP->AP2. Then translate by OA.
+             const p2 = v_AP.x;
+             const r2 = v_AP.y;
+             const q2 = (v_AP2.x - p2 * v_OP.x) / v_OP.y;
+             const s2 = (v_AP2.y - r2 * v_OP.x) / v_OP.y;
+             const A2 = [[p2, q2], [r2, s2]];
+             const b2 = [1, 0]; // Translate by OA
+             const f2 = (x,y) => ({x: A2[0][0]*x + A2[0][1]*y + b2[0], y: A2[1][0]*x + A2[1][1]*y + b2[1]});
+
+            return { f1, f2, A1, A2, b2 };
+        }
+
+        function startOrRestartLiveAttractor() {
+            if (liveDrawingId) cancelAnimationFrame(liveDrawingId);
+            attractorStatus.textContent = "Đang vẽ...";
+            const { f1, f2 } = calculateIFSFunctions(
+                parseFloat(mSlider.value), parseFloat(nSlider.value), parseFloat(hSlider.value)
+            );
+            let p = { x: 0.5, y: 0.5 };
+            const totalPoints = 50000; let drawnPoints = 0; attractorPoints = [];
+            function liveDrawBatch() {
+                if (drawnPoints >= totalPoints) { attractorStatus.textContent = "Hoàn thành!"; return; }
+                for(let i=0; i < 1000 && drawnPoints < totalPoints; i++) {
+                    const choice = Math.random(); let color;
+                    if (choice < 0.5) { p = f1(p.x, p.y); color = '#28a745'; } 
+                    else { p = f2(p.x, p.y); color = '#ff0000'; }
+                    if(drawnPoints > 200) attractorPoints.push({ x: p.x, y: p.y, color: color });
+                    drawnPoints++;
+                }
+                masterRedraw();
+                liveDrawingId = requestAnimationFrame(liveDrawBatch);
+            }
+            liveDrawBatch();
+        }
+
+        function displayFixedMathJax() {
+            const latex = `
+            \\(f_1(\\mathbf{x}) = A_1 \\mathbf{x}, \\quad f_2(\\mathbf{x}) = A_2 \\mathbf{x} + \\mathbf{b}_2 \\)
+            \\[
+            A_1 = \\begin{pmatrix} 0.5 & \\frac{n-0.25}{m} \\\\ m & \\frac{h-0.5m}{m} \\end{pmatrix}
+            \\]
+            \\[
+            A_2 = \\begin{pmatrix} -0.5 & \\frac{0.25-n}{m} \\\\ m & \\frac{h-0.5m}{m} \\end{pmatrix}, \\mathbf{b}_2 = \\begin{pmatrix} 1 \\\\ 0 \\end{pmatrix}
+            \\]`;
+            fixedMatrixDisplay.innerHTML = latex;
+            MathJax.typesetPromise([fixedMatrixDisplay]);
+        }
+
+        function displayDynamicMathJax(A1, A2, b2) {
+             const latex = `
+            \\[
+            A_1 = \\begin{pmatrix} ${A1[0][0].toFixed(3)} & ${A1[0][1].toFixed(3)} \\\\ ${A1[1][0].toFixed(3)} & ${A1[1][1].toFixed(3)} \\end{pmatrix}
+            \\]
+            \\[
+            A_2 = \\begin{pmatrix} ${A2[0][0].toFixed(3)} & ${A2[0][1].toFixed(3)} \\\\ ${A2[1][0].toFixed(3)} & ${A2[1][1].toFixed(3)} \\end{pmatrix}, \\mathbf{b}_2 = \\begin{pmatrix} ${b2[0]} \\\\ ${b2[1]} \\end{pmatrix}
+            \\]`;
+            dynamicMatrixDisplay.innerHTML = latex;
+            MathJax.typesetPromise([dynamicMatrixDisplay]);
+        }
+        
+        function masterRedraw() {
+            drawGrid(ctx);
+            if (isAttractorVisible) { drawStoredAttractor(ctx, attractorPoints); }
+            if (isGeometryVisible) { drawGeometry(ctx, points); }
+        }
+
+        function updateAndRedraw() {
+            const m = parseFloat(mSlider.value);
+            const n = parseFloat(nSlider.value);
+            const h = parseFloat(hSlider.value);
+            mValueSpan.textContent = m.toFixed(4);
+            nValueSpan.textContent = n.toFixed(4);
+            hValueSpan.textContent = h.toFixed(2);
+            points = {
+                O: { x: 0, y: 0 }, A: { x: 1, y: 0 },
+                P: { x: 0.5, y: m }, P1: { x: n, y: h }, P2: { x: 1 - n, y: h }
+            };
+            coordO.innerHTML = `<b>O</b>: (${points.O.x.toFixed(2)}, ${points.O.y.toFixed(2)})`;
+            coordA.innerHTML = `<b>A</b>: (${points.A.x.toFixed(2)}, ${points.A.y.toFixed(2)})`;
+            coordP.innerHTML = `<b>P</b>: (${points.P.x.toFixed(2)}, ${points.P.y.toFixed(2)})`;
+            coordP1.innerHTML = `<b>P₁</b>: (${points.P1.x.toFixed(2)}, ${points.P1.y.toFixed(2)})`;
+            coordP2.innerHTML = `<b>P₂</b>: (${points.P2.x.toFixed(2)}, ${points.P2.y.toFixed(2)})`;
+            
+            const { A1, A2, b2 } = calculateIFSFunctions(m, n, h);
+            displayDynamicMathJax(A1, A2, b2);
+            masterRedraw();
+            startOrRestartLiveAttractor();
+        }
+
+        // --- Event Listeners and Initialization ---
+        [mSlider, nSlider, hSlider].forEach(slider => slider.addEventListener('input', updateAndRedraw));
+        toggleAttractorBtn.addEventListener('click', () => { isAttractorVisible = !isAttractorVisible; toggleAttractorBtn.textContent = isAttractorVisible ? "Ẩn Attractor" : "Hiện Attractor"; masterRedraw(); });
+        toggleGeometryBtn.addEventListener('click', () => { isGeometryVisible = !isGeometryVisible; toggleGeometryBtn.textContent = isGeometryVisible ? "Ẩn Hình học" : "Hiện Hình học"; masterRedraw(); });
+        resetBtn.addEventListener('click', () => {
+            if (liveDrawingId) cancelAnimationFrame(liveDrawingId);
+            attractorPoints = []; isAttractorVisible = true; isGeometryVisible = true;
+            toggleAttractorBtn.textContent = "Ẩn Attractor"; toggleGeometryBtn.textContent = "Ẩn Hình học";
+            attractorStatus.textContent = "Di chuyển slider để bắt đầu"; masterRedraw();
+        });
+
+        function initialize() {
+            displayFixedMathJax();
+            updateAndRedraw();
+        }
+
+        window.onload = initialize;
+    </script>
+</body>
+</html>
