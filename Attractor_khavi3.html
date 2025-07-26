@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Vẽ Attractor Parabol từ IFS (Hoàn chỉnh)</title>
+    <!-- Thêm thư viện MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; background-color: #f0f2f5; padding-top: 20px; }
+        #main-container { display: flex; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); align-items: flex-start; }
+        #controls { width: 400px; padding-right: 25px; border-right: 1px solid #e0e0e0; }
+        #canvas-container { padding-left: 25px; position: relative; }
+        #canvas { border: 1px solid #ccc; background-color: #f9f9f9; }
+        .control-group { margin-bottom: 25px; }
+        label { font-weight: bold; display: block; margin-bottom: 8px;}
+        .k-control-container { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] { flex-grow: 1; cursor: pointer; }
+        input[type="number"] { width: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; text-align: center;}
+        h2, h3 { color: #0056b3; margin-top: 0; }
+        .math-display { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 5px; margin-top: 10px; font-size: 1.1em; line-height: 2.5; }
+        .axis-label { position: absolute; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <div id="controls">
+            <h2>Vẽ Attractor Parabol</h2>
+            <p>Thay đổi hệ số <code>k</code> để cập nhật attractor và hệ phương trình ngay lập tức.</p>
+
+            <div class="control-group">
+                <label for="k_slider">Hệ số k:</label>
+                <div class="k-control-container">
+                    <input type="range" id="k_slider" min="-6" max="6" value="3.55" step="0.01">
+                    <input type="number" id="k_input" min="-6" max="6" value="3.55" step="0.01">
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="iterations">Số điểm:</label>
+                <input type="number" id="iterations" value="50000">
+            </div>
+            
+            <div class="control-group">
+                <h3>Phương trình Parabol</h3>
+                <div id="parabola-equation" class="math-display"></div>
+                
+                <h3>Hệ hàm co (IFS)</h3>
+                <div id="ifs-equations" class="math-display"></div>
+            </div>
+        </div>
+        <div id="canvas-container">
+             <canvas id="canvas" width="550" height="550"></canvas>
+             <div id="axis-labels"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const kSlider = document.getElementById('k_slider');
+        const kInput = document.getElementById('k_input');
+        const iterationsInput = document.getElementById('iterations');
+        const parabolaEqDiv = document.getElementById('parabola-equation');
+        const ifsEqDiv = document.getElementById('ifs-equations');
+        const axisLabelsDiv = document.getElementById('axis-labels');
+
+        // Hàm vẽ lưới và nhãn trục
+        function drawGridAndLabels(transform) {
+            const { scaleX, scaleY, translateX, translateY, y_view_min, y_view_max } = transform;
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            
+            const mainAxisColor = '#888';
+            const gridColor = '#ddd';
+            const textColor = '#666';
+
+            // Xóa các nhãn cũ
+            axisLabelsDiv.innerHTML = '';
+
+            // --- VẼ LƯỚI ---
+            ctx.translate(translateX, translateY);
+            ctx.scale(scaleX, scaleY);
+            
+            const step = 0.1;
+            ctx.strokeStyle = gridColor;
+            ctx.lineWidth = 1 / scaleX; // Độ dày 1 pixel
+            
+            // Lưới dọc
+            for (let x = 0; x <= 1; x += step) {
+                ctx.beginPath();
+                ctx.moveTo(x, y_view_min);
+                ctx.lineTo(x, y_view_max);
+                ctx.stroke();
+                
+                // Thêm nhãn trục X
+                if (x > 0) { // Bỏ qua nhãn tại x=0
+                    const label = document.createElement('div');
+                    label.className = 'axis-label';
+                    label.textContent = x.toFixed(1);
+                    label.style.left = `${translateX + x * scaleX - 10}px`;
+                    label.style.top = `${translateY + 0 * scaleY + 10}px`;
+                    axisLabelsDiv.appendChild(label);
+                }
+            }
+            
+            // Lưới ngang
+            for (let y = Math.floor(y_view_min*10)/10; y <= Math.ceil(y_view_max*10)/10; y += step) {
+                if (Math.abs(y) < 0.001) continue; // Bỏ qua đường tại y=0
+                
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(1, y);
+                ctx.stroke();
+                
+                // Thêm nhãn trục Y
+                const label = document.createElement('div');
+                label.className = 'axis-label';
+                label.textContent = y.toFixed(1);
+                label.style.left = `${translateX + 0 * scaleX - 25}px`;
+                label.style.top = `${translateY + y * scaleY - 6}px`;
+                axisLabelsDiv.appendChild(label);
+            }
+
+            // --- VẼ TRỤC TỌA ĐỘ VÀ MŨI TÊN ---
+            ctx.strokeStyle = mainAxisColor;
+            ctx.fillStyle = mainAxisColor;
+            ctx.lineWidth = 2 / scaleX; // Trục chính dày hơn
+            
+            // Trục Y (x=0)
+            ctx.beginPath();
+            ctx.moveTo(0, y_view_min);
+            ctx.lineTo(0, y_view_max);
+            ctx.stroke();
+            
+            // Trục X (y=0)
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(1.0, 0);
+            ctx.stroke();
+            
+            // Vẽ mũi tên
+            const arrowSize = 0.03;
+            // Mũi tên trục X
+            ctx.beginPath();
+            ctx.moveTo(1 + arrowSize, 0);
+            ctx.lineTo(1, -arrowSize / 2);
+            ctx.lineTo(1, arrowSize / 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Mũi tên trục Y
+            ctx.beginPath();
+            ctx.moveTo(0, y_view_max);
+            ctx.lineTo(-arrowSize / 2, y_view_max - arrowSize / Math.abs(scaleY) * scaleX);
+            ctx.lineTo(arrowSize / 2, y_view_max - arrowSize / Math.abs(scaleY) * scaleX);
+            ctx.closePath();
+            ctx.fill();
+
+            // Nhãn trục X
+            const xLabel = document.createElement('div');
+            xLabel.className = 'axis-label';
+            xLabel.textContent = 'x';
+            xLabel.style.left = `${translateX + 1.0 * scaleX - 15}px`;
+            xLabel.style.top = `${translateY + 0 * scaleY + 5}px`;
+            axisLabelsDiv.appendChild(xLabel);
+            
+            // Nhãn trục Y
+            const yLabel = document.createElement('div');
+            yLabel.className = 'axis-label';
+            yLabel.textContent = 'y';
+            yLabel.style.left = `${translateX + 0 * scaleX - 20}px`;
+            yLabel.style.top = `${translateY + y_view_max * scaleY - 15}px`;
+            axisLabelsDiv.appendChild(yLabel);
+
+            ctx.restore();
+        }
+
+        function drawAttractor() {
+            const k = parseFloat(kSlider.value);
+            const iterations = parseInt(iterationsInput.value) || 50000;
+            kInput.value = k.toFixed(2);
+
+            const c = 0.25 * k;
+            
+            // Cập nhật công thức MathJax
+            parabolaEqDiv.innerHTML = `\\( y = ${k.toFixed(2)}x(1-x) \\)`;
+            ifsEqDiv.innerHTML = `\\( f_1 \\begin{pmatrix} x \\\\ y \\end{pmatrix} = 
+                                 \\begin{pmatrix} 0.5 & 0 \\\\ ${c.toFixed(4)} & 0.25 \\end{pmatrix} 
+                                 \\begin{pmatrix} x \\\\ y \\end{pmatrix} \\)
+                                 <br>
+                                 \\( f_2 \\begin{pmatrix} x \\\\ y \\end{pmatrix} = 
+                                 \\begin{pmatrix} -0.5 & 0 \\\\ ${c.toFixed(4)} & 0.25 \\end{pmatrix} 
+                                 \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\begin{pmatrix} 1 \\\\ 0 \\end{pmatrix} \\)`;
+            MathJax.typesetPromise();
+
+            const f1 = (p) => ({ x: 0.5 * p.x, y: c * p.x + 0.25 * p.y });
+            const f2 = (p) => ({ x: -0.5 * p.x + 1, y: c * p.x + 0.25 * p.y });
+            
+            // Xóa canvas
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            // Thiết lập hệ tọa độ động
+            const padding = 50;
+            const y_vertex = k / 4;
+            const y_min = Math.min(0, y_vertex);
+            const y_max = Math.max(0, y_vertex);
+            const verticalRange = Math.max(0.1, y_max - y_min);
+            const y_view_min = y_min - verticalRange * 0.1;
+            const y_view_max = y_max + verticalRange * 0.1;
+            const viewRangeY = y_view_max - y_view_min;
+
+            const transform = {
+                scaleX: canvas.width - 2 * padding,
+                scaleY: -(canvas.height - 2 * padding) / viewRangeY,
+                translateX: padding,
+                translateY: padding - y_view_max * (-(canvas.height - 2 * padding) / viewRangeY),
+                y_view_min: y_view_min,
+                y_view_max: y_view_max
+            };
+            
+            drawGridAndLabels(transform);
+
+            // Vẽ attractor
+            ctx.save();
+            ctx.translate(transform.translateX, transform.translateY);
+            ctx.scale(transform.scaleX, transform.scaleY);
+            
+            let currentPoint = {x: Math.random(), y: Math.random()};
+            for (let i = 0; i < iterations; i++) {
+                const color = Math.random() < 0.5 ? 'lime' : 'red';
+                currentPoint = color === 'lime' ? f1(currentPoint) : f2(currentPoint);
+
+                if (i > 20) {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(currentPoint.x, currentPoint.y, 1.5 / transform.scaleX, 1.5 / Math.abs(transform.scaleY));
+                }
+            }
+            ctx.restore();
+        }
+        
+        // --- Xử lý sự kiện đồng bộ ---
+        function handleKChange(event) {
+            const newValue = parseFloat(event.target.value);
+            if(isNaN(newValue)) return;
+            kSlider.value = newValue;
+            kInput.value = newValue.toFixed(2);
+            drawAttractor();
+        }
+
+        kSlider.addEventListener('input', handleKChange);
+        kInput.addEventListener('change', handleKChange);
+        iterationsInput.addEventListener('input', drawAttractor);
+
+        drawAttractor(); 
+    </script>
+</body>
+</html>
