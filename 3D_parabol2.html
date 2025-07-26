@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Attractor với Mặt phẳng Lưới Oxy</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        #container { position: absolute; width: 100%; height: 100%; }
+        #info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #000;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 400px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 6px 12px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+        button:hover { background: #45a049; }
+        #iterations { width: 150px; }
+        .math { font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="info">
+        <div class="math">
+            \[
+            \begin{cases}
+            f_1 \begin{pmatrix} x \\ y \\ z \end{pmatrix} = 
+            \begin{pmatrix} 
+            0.00 & 0.50 & 0.00 \\ 
+            1.00 & 0.00 & 0.00 \\ 
+            0.00 & 0.50 & 0.50 
+            \end{pmatrix} 
+            \begin{pmatrix} x \\ y \\ z \end{pmatrix}
+            & \textcolor{green}{\text{(Xanh lá)}}
+            \\
+            f_2 \begin{pmatrix} x \\ y \\ z \end{pmatrix} = 
+            \begin{pmatrix} 
+            0.00 & 0.50 & 0.00 \\ 
+            1.00 & 0.00 & 0.00 \\ 
+            0.00 & -0.50 & 0.50 
+            \end{pmatrix} 
+            \begin{pmatrix} x \\ y \\ z \end{pmatrix} + 
+            \begin{pmatrix} 0.50 \\ 0.00 \\ 0.50 \end{pmatrix}
+            & \textcolor{magenta}{\text{(Đỏ tươi)}}
+            \end{cases}
+            \]
+        </div>
+        <div style="margin-top: 10px;">
+            <strong>Hệ tọa độ:</strong><br>
+            <span style="color: red;">X: Đỏ</span>, 
+            <span style="color: green;">Y: Xanh lá</span>, 
+            <span style="color: blue;">Z: Xanh dương</span><br>
+            <span>Mặt phẳng lưới: Oxy</span>
+        </div>
+    </div>
+    <div id="controls">
+        <button id="generate">Tạo mới</button>
+        <div>
+            <span>Số điểm: </span>
+            <input type="range" id="iterations" min="1000" max="50000" value="20000">
+            <span id="pointCount">20,000</span>
+        </div>
+    </div>
+
+    <script>
+        // Khởi tạo Three.js
+        const container = document.getElementById('container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(1.5, 1.5, 1.5);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(renderer.domElement);
+        
+        // Điều khiển camera
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Ánh sáng
+        const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
+        light1.position.set(1, 1, 1);
+        scene.add(light1);
+        
+        const light2 = new THREE.DirectionalLight(0xffffff, 0.5);
+        light2.position.set(-1, -1, -1);
+        scene.add(light2);
+        
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        // Hệ trục tọa độ với mũi tên
+        function createArrowHelper(direction, origin, length, color, headLength = 0.2, headWidth = 0.1) {
+            const arrow = new THREE.ArrowHelper(
+                direction,
+                origin,
+                length,
+                color,
+                headLength,
+                headWidth
+            );
+            return arrow;
+        }
+
+        // Tạo các mũi tên cho trục
+        const arrowX = createArrowHelper(
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 0, 0),
+            1.5,
+            0xff0000
+        );
+        scene.add(arrowX);
+
+        const arrowY = createArrowHelper(
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(0, 0, 0),
+            1.5,
+            0x00ff00
+        );
+        scene.add(arrowY);
+
+        const arrowZ = createArrowHelper(
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 0, 0),
+            1.5,
+            0x0000ff
+        );
+        scene.add(arrowZ);
+
+        // Thêm nhãn cho các trục
+        function createAxisLabel(text, position, color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const context = canvas.getContext('2d');
+            context.fillStyle = color;
+            context.font = 'Bold 40px Arial';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, 32, 32);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(material);
+            sprite.position.copy(position);
+            sprite.scale.set(0.2, 0.2, 0.2);
+            return sprite;
+        }
+
+        scene.add(createAxisLabel('X', new THREE.Vector3(1.7, 0, 0), 'red'));
+        scene.add(createAxisLabel('Y', new THREE.Vector3(0, 1.7, 0), 'green'));
+        scene.add(createAxisLabel('Z', new THREE.Vector3(0, 0, 1.7), 'blue'));
+
+        // Tạo mặt phẳng lưới OXY (thay vì OXZ)
+        const gridSize = 3;
+        const divisions = 20;
+        const gridColor1 = 0x888888;
+        const gridColor2 = 0x888888;
+        
+        // Tạo lưới OXY bằng cách xoay GridHelper 90 độ quanh trục X
+        const gridHelper = new THREE.GridHelper(gridSize, divisions, gridColor1, gridColor2);
+        gridHelper.rotation.x = Math.PI / 2; // Xoay 90 độ để nằm trên mặt phẳng OXY
+        scene.add(gridHelper);
+
+        // Định nghĩa hàm co
+        const f1 = (point) => ({
+            point: new THREE.Vector3(
+                0.00 * point.x + 0.50 * point.y + 0.00 * point.z,
+                1.00 * point.x + 0.00 * point.y + 0.00 * point.z,
+                0.00 * point.x + 0.50 * point.y + 0.50 * point.z
+            ),
+            color: new THREE.Color(0x00ff00) // Xanh lá
+        });
+
+        const f2 = (point) => ({
+            point: new THREE.Vector3(
+                0.00 * point.x + 0.50 * point.y + 0.00 * point.z + 0.50,
+                1.00 * point.x + 0.00 * point.y + 0.00 * point.z + 0.00,
+                0.00 * point.x + (-0.50) * point.y + 0.50 * point.z + 0.50
+            ),
+            color: new THREE.Color(0xff00ff) // Đỏ tươi
+        });
+
+        // Tạo attractor
+        let attractorMesh;
+
+        function generateAttractor() {
+            const iterations = parseInt(document.getElementById('iterations').value);
+            document.getElementById('pointCount').textContent = iterations.toLocaleString();
+            
+            // Tạo geometry
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(iterations * 3);
+            const colors = new Float32Array(iterations * 3);
+            
+            // Điểm ban đầu
+            let currentPoint = new THREE.Vector3(
+                Math.random(), 
+                Math.random(), 
+                Math.random()
+            );
+            
+            // Bỏ qua điểm đầu
+            for (let i = 0; i < 10; i++) {
+                currentPoint = Math.random() < 0.5 ? f1(currentPoint).point : f2(currentPoint).point;
+            }
+            
+            // Tạo điểm
+            for (let i = 0; i < iterations; i++) {
+                let result;
+                if (Math.random() < 0.5) {
+                    result = f1(currentPoint);
+                } else {
+                    result = f2(currentPoint);
+                }
+                currentPoint = result.point;
+                
+                positions[i * 3] = currentPoint.x;
+                positions[i * 3 + 1] = currentPoint.y;
+                positions[i * 3 + 2] = currentPoint.z;
+                
+                colors[i * 3] = result.color.r;
+                colors[i * 3 + 1] = result.color.g;
+                colors[i * 3 + 2] = result.color.b;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: 0.02,
+                vertexColors: true,
+                sizeAttenuation: true
+            });
+            
+            // Xóa attractor cũ nếu có
+            if (attractorMesh) {
+                scene.remove(attractorMesh);
+            }
+            
+            attractorMesh = new THREE.Points(geometry, material);
+            scene.add(attractorMesh);
+        }
+
+        // Sự kiện
+        document.getElementById('generate').addEventListener('click', generateAttractor);
+        document.getElementById('iterations').addEventListener('input', function() {
+            document.getElementById('pointCount').textContent = this.value.toLocaleString();
+        });
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Khởi tạo
+        generateAttractor();
+        MathJax.typesetPromise();
+    </script>
+</body>
+</html>
