@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Vẽ Attractor Parabol từ IFS (k âm và dương)</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; background-color: #f0f2f5; padding-top: 20px; }
+        #main-container { display: flex; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+        #controls { width: 320px; padding-right: 25px; border-right: 1px solid #e0e0e0; }
+        #canvas-container { padding-left: 25px; position: relative; }
+        #canvas { border: 1px solid #ccc; background-color: #000; } /* Nền đen để màu sắc nổi bật */
+        .control-group { margin-bottom: 25px; }
+        label { font-weight: bold; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        input[type="number"] { width: 120px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-top: 5px; box-sizing: border-box;}
+        h2, h3 { color: #0056b3; margin-top: 0; }
+        #ifs-display { background-color: #e9ecef; padding: 15px; border-radius: 5px; font-family: 'Courier New', Courier, monospace; white-space: pre; color: #333; }
+        .axis-label { position: absolute; color: white; font-size: 12px; }
+        .grid-line { position: absolute; background-color: rgba(255, 255, 255, 0.2); }
+        .x-grid { height: 1px; width: 100%; }
+        .y-grid { width: 1px; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <div id="controls">
+            <h2>Vẽ Attractor Parabol</h2>
+            <p>Thay đổi hệ số <code>k</code> để vẽ lại attractor ngay lập tức.</p>
+
+            <div class="control-group">
+                <label for="k_slider">Hệ số k: <span id="k_value">3.55</span></label><br>
+                <!-- THAY ĐỔI Ở ĐÂY: min="-6" max="6" -->
+                <input type="range" id="k_slider" min="-6" max="6" value="3.55" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label for="iterations">Số điểm:</label><br>
+                <input type="number" id="iterations" value="50000">
+            </div>
+            
+            <div class="control-group">
+                <h3>Hệ hàm co (IFS) được tính:</h3>
+                <div id="ifs-display">...</div>
+            </div>
+        </div>
+        <div id="canvas-container">
+             <canvas id="canvas" width="500" height="500"></canvas>
+             <div id="grid-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const kSlider = document.getElementById('k_slider');
+        const iterationsInput = document.getElementById('iterations');
+        const ifsDisplay = document.getElementById('ifs-display');
+        const kValueSpan = document.getElementById('k_value');
+        const gridContainer = document.getElementById('grid-container');
+
+        function drawGridAndAxes() {
+            // Xóa grid cũ
+            gridContainer.innerHTML = '';
+            
+            const k = parseFloat(kSlider.value);
+            const padding = 50;
+            const usableWidth = canvas.width - 2 * padding;
+            const usableHeight = canvas.height - 2 * padding;
+
+            // Tính toán giới hạn trên và dưới của parabol
+            const y_vertex = k / 4; // Tọa độ y của đỉnh
+            const y_min = Math.min(0, y_vertex);
+            const y_max = Math.max(0, y_vertex);
+            const verticalRange = Math.max(0.1, y_max - y_min); // Tránh chia cho 0 khi k=0
+
+            // Tính toán tỉ lệ và vị trí gốc tọa độ
+            const scaleX = usableWidth;
+            const scaleY = -usableHeight / (verticalRange * 1.2); // Lật trục Y và thêm 20% khoảng trống
+            const translateX = padding;
+            const translateY = padding - y_max * scaleY; // Đặt đỉnh cao nhất ở mép trên
+
+            // Tính toán phạm vi tọa độ thực tế
+            const xMin = 0;
+            const xMax = 1;
+            const yMin = y_min - verticalRange * 0.1;
+            const yMax = y_max + verticalRange * 0.1;
+
+            // Vẽ đường lưới và nhãn trục X
+            for (let x = 0; x <= 1; x += 0.1) {
+                const screenX = translateX + x * scaleX;
+                
+                // Đường lưới dọc
+                const gridLine = document.createElement('div');
+                gridLine.className = 'grid-line y-grid';
+                gridLine.style.left = `${screenX}px`;
+                gridLine.style.top = `${padding}px`;
+                gridLine.style.height = `${usableHeight}px`;
+                gridContainer.appendChild(gridLine);
+                
+                // Nhãn trục X
+                const label = document.createElement('div');
+                label.className = 'axis-label';
+                label.textContent = x.toFixed(1);
+                label.style.left = `${screenX - 10}px`;
+                label.style.bottom = `${padding - 25}px`;
+                gridContainer.appendChild(label);
+            }
+
+            // Vẽ đường lưới và nhãn trục Y
+            for (let y = yMin; y <= yMax; y += 0.1) {
+                const screenY = translateY + y * scaleY;
+                
+                // Đường lưới ngang
+                const gridLine = document.createElement('div');
+                gridLine.className = 'grid-line x-grid';
+                gridLine.style.left = `${padding}px`;
+                gridLine.style.top = `${screenY}px`;
+                gridLine.style.width = `${usableWidth}px`;
+                gridContainer.appendChild(gridLine);
+                
+                // Nhãn trục Y
+                const label = document.createElement('div');
+                label.className = 'axis-label';
+                label.textContent = y.toFixed(1);
+                label.style.left = `${padding - 30}px`;
+                label.style.top = `${screenY - 8}px`;
+                gridContainer.appendChild(label);
+            }
+
+            // Vẽ trục X và Y
+            const xAxis = document.createElement('div');
+            xAxis.className = 'grid-line x-grid';
+            xAxis.style.backgroundColor = 'white';
+            xAxis.style.left = `${padding}px`;
+            xAxis.style.top = `${translateY}px`;
+            xAxis.style.width = `${usableWidth}px`;
+            gridContainer.appendChild(xAxis);
+
+            const yAxis = document.createElement('div');
+            yAxis.className = 'grid-line y-grid';
+            yAxis.style.backgroundColor = 'white';
+            yAxis.style.left = `${translateX}px`;
+            yAxis.style.top = `${padding}px`;
+            yAxis.style.height = `${usableHeight}px`;
+            gridContainer.appendChild(yAxis);
+        }
+
+        function drawAttractor() {
+            const k = parseFloat(kSlider.value);
+            const iterations = parseInt(iterationsInput.value) || 50000;
+
+            kValueSpan.textContent = k.toFixed(2);
+
+            const a = 0.5, b = 0;
+            const c = 0.25 * k;
+            const d = 0.25;
+            const e = -0.5, f = 0;
+            const g = 0.25 * k;
+            const h = 0.25;
+            const tx = 1, ty = 0;
+            
+            ifsDisplay.textContent = 
+`f1(x,y) = [[${a}, ${b}], [${c.toFixed(4)}, ${d}]] * [x,y]
+
+f2(x,y) = [[${e}, ${f}], [${g.toFixed(4)}, ${h}]] * [x,y] + [${tx},${ty}]`;
+
+            const f1 = (p) => ({ x: a * p.x + b * p.y, y: c * p.x + d * p.y });
+            const f2 = (p) => ({ x: e * p.x + f * p.y + tx, y: g * p.x + h * p.y + ty });
+
+            // ---- HỆ TỌA ĐỘ ĐỘNG ----
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const padding = 50;
+            const usableWidth = canvas.width - 2 * padding;
+            const usableHeight = canvas.height - 2 * padding;
+
+            // Tính toán giới hạn trên và dưới của parabol
+            const y_vertex = k / 4; // Tọa độ y của đỉnh
+            const y_min = Math.min(0, y_vertex);
+            const y_max = Math.max(0, y_vertex);
+            const verticalRange = Math.max(0.1, y_max - y_min); // Tránh chia cho 0 khi k=0
+
+            // Tính toán tỉ lệ và vị trí gốc tọa độ để hình vẽ luôn vừa vặn
+            const scaleX = usableWidth;
+            const scaleY = -usableHeight / (verticalRange * 1.2); // Lật trục Y và thêm 20% khoảng trống
+            const translateX = padding;
+            const translateY = padding - y_max * scaleY; // Đặt đỉnh cao nhất ở mép trên
+
+            ctx.setTransform(scaleX, 0, 0, scaleY, translateX, translateY);
+            
+            // ---- CHAOS GAME ----
+            let currentPoint = {x: Math.random(), y: Math.random()};
+            for (let i = 0; i < iterations; i++) {
+                let color;
+                if (Math.random() < 0.5) {
+                    currentPoint = f1(currentPoint);
+                    color = 'lime'; // Xanh lá
+                } else {
+                    currentPoint = f2(currentPoint);
+                    color = 'red';  // Đỏ tươi
+                }
+
+                if (i > 20) {
+                    ctx.fillStyle = color;
+                    // Vẽ một điểm có kích thước là 1 pixel trên màn hình
+                    ctx.fillRect(currentPoint.x, currentPoint.y, 1 / scaleX, 1 / Math.abs(scaleY));
+                }
+            }
+            ctx.restore(); // Khôi phục lại context về trạng thái mặc định
+            
+            // Vẽ lưới và trục tọa độ
+            drawGridAndAxes();
+        }
+
+        kSlider.addEventListener('input', drawAttractor);
+        iterationsInput.addEventListener('input', drawAttractor);
+
+        drawAttractor(); 
+    </script>
+</body>
+</html>
