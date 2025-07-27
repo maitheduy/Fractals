@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>IFS Attractor cho Paraboloid 3D (2 hàm)</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; background-color: #f0f2f5; padding-top: 20px; }
+        #main-container { display: flex; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); align-items: flex-start; }
+        #controls { width: 450px; padding-right: 25px; border-right: 1px solid #e0e0e0; }
+        #canvas-container { padding-left: 25px; text-align: center; position: relative; }
+        #canvas { border: 1px solid #ccc; background-color: #000; cursor: grab; }
+        #canvas:active { cursor: grabbing; }
+        .control-group { margin-bottom: 25px; }
+        label { font-weight: bold; display: block; margin-bottom: 8px;}
+        input[type="range"] { width: 100%; }
+        h2, h3 { color: #0056b3; margin-top: 0; }
+        .math-display { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 1.0em; line-height: 2.2; overflow-x: auto;}
+        #zoom-controls { position: absolute; top: 10px; right: 35px; background: rgba(255,255,255,0.8); padding: 5px; border-radius: 5px; z-index: 10; }
+        #zoom-controls button { width: 30px; height: 30px; margin: 0 2px; font-size: 16px; cursor: pointer; border: 1px solid #ccc; background: white; }
+        #zoom-controls button:hover { background: #eee; }
+        #view-controls { position: absolute; top: 50px; right: 35px; background: rgba(255,255,255,0.8); padding: 5px; border-radius: 5px; z-index: 10; }
+        #view-controls button { width: 30px; height: 30px; margin: 2px; font-size: 16px; cursor: pointer; border: 1px solid #ccc; background: white; }
+        #view-controls button:hover { background: #eee; }
+        .tooltip { position: absolute; background: rgba(0,0,0,0.7); color: white; padding: 5px; border-radius: 3px; font-size: 12px; visibility: hidden; z-index: 20; }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <div id="controls">
+            <h2>Vẽ Attractor Paraboloid (2 Hàm co)</h2>
+            <p>Thay đổi hệ số <code>k</code> để cập nhật attractor và hệ phương trình. Hệ số <code>l</code> sẽ được tính theo: <code>l = 1 - 3k</code>.</p>
+
+            <div class="control-group">
+                <label for="k_slider">Hệ số k: <span id="k_value">0.50</span></label>
+                <input type="range" id="k_slider" min="-1" max="1" value="0.5" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label for="iterations">Số điểm:</label>
+                <input type="number" id="iterations" value="80000" style="width: 120px; padding: 8px;">
+            </div>
+            
+            <div class="control-group">
+                <h3>Phương trình Attractor</h3>
+                <div id="surface-equation" class="math-display"></div>
+                
+                <h3>Hệ hàm co (IFS)</h3>
+                <div id="ifs-equations" class="math-display"></div>
+            </div>
+        </div>
+        <div id="canvas-container">
+            <div id="zoom-controls">
+                <button id="zoom-in" title="Phóng to">+</button>
+                <button id="zoom-out" title="Thu nhỏ">-</button>
+                <button id="reset-view" title="Reset view">↻</button>
+            </div>
+            <div id="view-controls">
+                <button id="center-view" title="Đẩy về trung tâm">⌂</button>
+                <button id="view-top" title="Nhìn từ trên">↑</button>
+                <button id="view-front" title="Nhìn từ trước">→</button>
+                <button id="view-side" title="Nhìn từ bên">↓</button>
+            </div>
+            <div class="tooltip" id="tooltip"></div>
+            <canvas id="canvas" width="550" height="550"></canvas>
+            <p><i>Nhấp và kéo chuột để xoay hình. Sử dụng nút +/- để phóng to/thu nhỏ.</i></p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const kSlider = document.getElementById('k_slider');
+        const iterationsInput = document.getElementById('iterations');
+        const surfaceEqDiv = document.getElementById('surface-equation');
+        const ifsEqDiv = document.getElementById('ifs-equations');
+        const kValueSpan = document.getElementById('k_value');
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const resetViewBtn = document.getElementById('reset-view');
+        const centerViewBtn = document.getElementById('center-view');
+        const viewTopBtn = document.getElementById('view-top');
+        const viewFrontBtn = document.getElementById('view-front');
+        const viewSideBtn = document.getElementById('view-side');
+        const tooltip = document.getElementById('tooltip');
+
+        let rotationX = 0.5, rotationY = -0.5, isDragging = false, lastMouseX = 0, lastMouseY = 0;
+        let zoom = 1.0;
+        const initialZoom = 1.0;
+        let offsetX = 0, offsetY = 0;
+
+        // Hiển thị tooltip
+        function showTooltip(element, text) {
+            const rect = element.getBoundingClientRect();
+            tooltip.textContent = text;
+            tooltip.style.left = `${rect.left + window.scrollX}px`;
+            tooltip.style.top = `${rect.top + window.scrollY - 30}px`;
+            tooltip.style.visibility = 'visible';
+        }
+
+        function hideTooltip() {
+            tooltip.style.visibility = 'hidden';
+        }
+
+        // Thêm sự kiện tooltip cho các nút
+        const buttons = [zoomInBtn, zoomOutBtn, resetViewBtn, centerViewBtn, viewTopBtn, viewFrontBtn, viewSideBtn];
+        buttons.forEach(btn => {
+            btn.addEventListener('mouseover', (e) => showTooltip(e.target, e.target.title));
+            btn.addEventListener('mouseout', hideTooltip);
+        });
+
+        function project(p, rX, rY) {
+            const cosY = Math.cos(rY), sinY = Math.sin(rY);
+            const cosX = Math.cos(rX), sinX = Math.sin(rX);
+            let tempZ = p.x * sinY + p.z * cosY;
+            const tempX = p.x * cosY - p.z * sinY;
+            const tempY = p.y * cosX - tempZ * sinX;
+            tempZ = p.y * sinX + tempZ * cosX;
+            const fov = 300;
+            const scale = fov / (fov + tempZ * 200) * zoom;
+            return { 
+                x: tempX * scale * 200 + offsetX, 
+                y: tempY * scale * 200 + offsetY, 
+                z: tempZ,
+                scale: scale 
+            };
+        }
+
+        function drawAxes() {
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            
+            // Vẽ lưới
+            ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+            ctx.lineWidth = 0.5;
+            const gridSize = 200 * zoom;
+            const gridStep = 50 * zoom;
+            
+            // Lưới theo trục X và Y
+            for (let i = -gridSize; i <= gridSize; i += gridStep) {
+                // Lưới X
+                const xStart = project({x: i/200, y: -gridSize/200, z: 0}, rotationX, rotationY);
+                const xEnd = project({x: i/200, y: gridSize/200, z: 0}, rotationX, rotationY);
+                ctx.beginPath();
+                ctx.moveTo(xStart.x, -xStart.y);
+                ctx.lineTo(xEnd.x, -xEnd.y);
+                ctx.stroke();
+                
+                // Lưới Y
+                const yStart = project({x: -gridSize/200, y: i/200, z: 0}, rotationX, rotationY);
+                const yEnd = project({x: gridSize/200, y: i/200, z: 0}, rotationX, rotationY);
+                ctx.beginPath();
+                ctx.moveTo(yStart.x, -yStart.y);
+                ctx.lineTo(yEnd.x, -yEnd.y);
+                ctx.stroke();
+            }
+            
+            // Vẽ các trục tọa độ
+            const origin = project({x: 0, y: 0, z: 0}, rotationX, rotationY);
+            const xAxis = project({x: gridSize/200/zoom, y: 0, z: 0}, rotationX, rotationY);
+            const yAxis = project({x: 0, y: gridSize/200/zoom, z: 0}, rotationX, rotationY);
+            const zAxis = project({x: 0, y: 0, z: gridSize/200/zoom}, rotationX, rotationY);
+            
+            // Trục X (đỏ)
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(origin.x, -origin.y);
+            ctx.lineTo(xAxis.x, -xAxis.y);
+            ctx.stroke();
+            
+            // Mũi tên X
+            drawArrowHead(xAxis.x, -xAxis.y, xAxis.x - origin.x, -(xAxis.y - origin.y), 'rgba(255, 0, 0, 0.8)');
+            
+            // Trục Y (xanh lá)
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+            ctx.beginPath();
+            ctx.moveTo(origin.x, -origin.y);
+            ctx.lineTo(yAxis.x, -yAxis.y);
+            ctx.stroke();
+            
+            // Mũi tên Y
+            drawArrowHead(yAxis.x, -yAxis.y, yAxis.x - origin.x, -(yAxis.y - origin.y), 'rgba(0, 255, 0, 0.8)');
+            
+            // Trục Z (xanh dương)
+            ctx.strokeStyle = 'rgba(0, 0, 255, 0.8)';
+            ctx.beginPath();
+            ctx.moveTo(origin.x, -origin.y);
+            ctx.lineTo(zAxis.x, -zAxis.y);
+            ctx.stroke();
+            
+            // Mũi tên Z
+            drawArrowHead(zAxis.x, -zAxis.y, zAxis.x - origin.x, -(zAxis.y - origin.y), 'rgba(0, 0, 255, 0.8)');
+            
+            // Nhãn trục
+            ctx.font = '14px Arial';
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+            ctx.fillText('X', xAxis.x + 10, -xAxis.y + 5);
+            
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+            ctx.fillText('Y', yAxis.x + 5, -yAxis.y - 10);
+            
+            ctx.fillStyle = 'rgba(0, 0, 255, 0.8)';
+            ctx.fillText('Z', zAxis.x + 5, -zAxis.y + 15);
+            
+            // Vẽ các giá trị trên trục
+            ctx.font = '10px Arial';
+            ctx.fillStyle = 'white';
+            
+            // Giá trị trên trục X
+            for (let i = -1; i <= 1; i += 0.5) {
+                if (i === 0) continue;
+                const point = project({x: i, y: 0, z: 0}, rotationX, rotationY);
+                ctx.fillText(i.toFixed(1), point.x + 5, -point.y + 5);
+            }
+            
+            // Giá trị trên trục Y
+            for (let i = -1; i <= 1; i += 0.5) {
+                if (i === 0) continue;
+                const point = project({x: 0, y: i, z: 0}, rotationX, rotationY);
+                ctx.fillText(i.toFixed(1), point.x + 5, -point.y + 5);
+            }
+            
+            // Giá trị trên trục Z
+            for (let i = -1; i <= 1; i += 0.5) {
+                if (i === 0) continue;
+                const point = project({x: 0, y: 0, z: i}, rotationX, rotationY);
+                ctx.fillText(i.toFixed(1), point.x + 5, -point.y + 5);
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawArrowHead(x, y, dx, dy, color) {
+            const headLength = 10;
+            const angle = Math.atan2(dy, dx);
+            
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headLength * Math.cos(angle - Math.PI/6), y - headLength * Math.sin(angle - Math.PI/6));
+            ctx.lineTo(x - headLength * Math.cos(angle + Math.PI/6), y - headLength * Math.sin(angle + Math.PI/6));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawScene() {
+            const k = parseFloat(kSlider.value);
+            const l = 1 - 3 * k;
+            const iterations = parseInt(iterationsInput.value) || 80000;
+            kValueSpan.textContent = k.toFixed(2);
+
+            // Cập nhật phương trình
+            const A = 2 - 8 * k, C = 1 - 4 * k, D = 4 * k, E = 2 * k;
+            surfaceEqDiv.innerHTML = `\\( z = ${A.toFixed(2)}x^2 + ${C.toFixed(2)}y^2 + ${D.toFixed(2)}x + ${E.toFixed(2)}y \\)`;
+            ifsEqDiv.innerHTML = `\\( f_1(\\vec{p}) = \\begin{pmatrix} 0&0.5&0\\\\1&0&0\\\\0&${k.toFixed(2)}&0.5 \\end{pmatrix} \\vec{p} \\) <br>
+                                 \\( f_2(\\vec{p}) = \\begin{pmatrix} 0&0.5&0\\\\1&0&0\\\\0&${l.toFixed(2)}&0.5 \\end{pmatrix} \\vec{p} + \\begin{pmatrix} 0.5\\\\0\\\\0.5 \\end{pmatrix} \\)`;
+            MathJax.typesetPromise();
+
+            // Định nghĩa các hàm co
+            const f1 = (p) => ({ x: 0.5*p.y, y: p.x, z: k*p.y + 0.5*p.z });
+            const f2 = (p) => ({ x: 0.5*p.y + 0.5, y: p.x, z: l*p.y + 0.5*p.z + 0.5 });
+
+            // Vẽ
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            
+            // Vẽ hệ trục tọa độ và lưới
+            drawAxes();
+            
+            // Vẽ attractor
+            let currentPoint = {x: 0.5, y: 0.5, z: 0};
+            for (let i = 0; i < iterations; i++) {
+                let color;
+                if(Math.random() < 0.5) {
+                    currentPoint = f1(currentPoint);
+                    color = 'lime';
+                } else {
+                    currentPoint = f2(currentPoint);
+                    color = 'red';
+                }
+
+                if (i > 50) {
+                    const p = project(currentPoint, rotationX, rotationY);
+                    const size = Math.max(1, p.scale * 1.5);
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = Math.max(0.1, p.scale);
+                    ctx.fillRect(p.x, -p.y, size, size);
+                }
+            }
+            ctx.restore();
+        }
+
+        // Xử lý sự kiện zoom
+        zoomInBtn.addEventListener('click', () => {
+            zoom *= 1.2;
+            drawScene();
+        });
+        
+        zoomOutBtn.addEventListener('click', () => {
+            zoom /= 1.2;
+            drawScene();
+        });
+        
+        resetViewBtn.addEventListener('click', () => {
+            zoom = initialZoom;
+            rotationX = 0.5;
+            rotationY = -0.5;
+            offsetX = 0;
+            offsetY = 0;
+            drawScene();
+        });
+
+        // Xử lý sự kiện đẩy về trung tâm
+        centerViewBtn.addEventListener('click', () => {
+            offsetX = 0;
+            offsetY = 0;
+            drawScene();
+        });
+
+        // Các view preset
+        viewTopBtn.addEventListener('click', () => {
+            rotationX = 0;
+            rotationY = 0;
+            drawScene();
+        });
+
+        viewFrontBtn.addEventListener('click', () => {
+            rotationX = 0;
+            rotationY = Math.PI/2;
+            drawScene();
+        });
+
+        viewSideBtn.addEventListener('click', () => {
+            rotationX = 0;
+            rotationY = 0;
+            drawScene();
+        });
+
+        // Xử lý kéo để xoay và di chuyển
+        canvas.addEventListener('mousedown', (e) => { 
+            isDragging = true; 
+            lastMouseX = e.clientX; 
+            lastMouseY = e.clientY; 
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                if (e.shiftKey) {
+                    // Di chuyển hình khi giữ Shift
+                    offsetX += (e.clientX - lastMouseX);
+                    offsetY += (e.clientY - lastMouseY);
+                } else {
+                    // Xoay hình khi không giữ Shift
+                    rotationY += (e.clientX - lastMouseX) * 0.01;
+                    rotationX += (e.clientY - lastMouseY) * 0.01;
+                }
+                lastMouseX = e.clientX; 
+                lastMouseY = e.clientY;
+                requestAnimationFrame(drawScene);
+            }
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        // Xử lý sự kiện cuộn chuột để zoom
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            zoom *= e.deltaY > 0 ? 0.9 : 1.1;
+            drawScene();
+        });
+
+        // Các sự kiện khác
+        kSlider.addEventListener('input', () => requestAnimationFrame(drawScene));
+        iterationsInput.addEventListener('input', () => requestAnimationFrame(drawScene));
+
+        drawScene();
+    </script>
+</body>
+</html>
