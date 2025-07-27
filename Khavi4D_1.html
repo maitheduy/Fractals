@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>IFS Attractor 4D - Tương tác Toàn cảnh</title>
+    <!-- Thêm thư viện MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; background-color: #f0f2f5; padding-top: 20px; }
+        #main-container { display: flex; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); align-items: flex-start; }
+        #controls { width: 450px; padding-right: 25px; border-right: 1px solid #e0e0e0; }
+        #canvas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .canvas-container { text-align: center; }
+        .canvas-container canvas { border: 1px solid #ccc; background-color: #000; cursor: grab; }
+        .canvas-container canvas:active { cursor: grabbing; }
+        .canvas-container p { font-size: 0.9em; color: #666; margin-top: 5px; }
+        .control-group { margin-bottom: 25px; }
+        label { font-weight: bold; display: block; margin-bottom: 8px;}
+        input[type="range"] { width: 100%; }
+        h2, h3 { color: #0056b3; margin-top: 0; }
+        .math-display { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 1.0em; line-height: 2.2; overflow-x: auto;}
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <div id="controls">
+            <h2>Vẽ Attractor 4D</h2>
+            <p>Thay đổi các hệ số để cập nhật attractor 4D và quan sát qua 4 phép chiếu 3D khả vi.</p>
+
+            <div class="control-group">
+                <label for="k_slider">Hệ số k (độ cong z): <span id="k_value">0.50</span></label>
+                <input type="range" id="k_slider" min="-1.5" max="1.5" value="0.5" step="0.01">
+            </div>
+
+            <div class="control-group">
+                <label for="l_slider">Hệ số l (độ cong t): <span id="l_value">-0.50</span></label>
+                <input type="range" id="l_slider" min="-1.5" max="1.5" value="-0.5" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label for="iterations">Số điểm:</label>
+                <input type="number" id="iterations" value="100000" style="width: 120px; padding: 8px;">
+            </div>
+            
+            <h3>Hệ hàm co (IFS) 4D</h3>
+            <div id="ifs-equations" class="math-display"></div>
+        </div>
+        <div id="canvas-grid">
+            <div class="canvas-container">
+                <h4>Phép chiếu Oxyz</h4>
+                <canvas id="canvasOxyz" width="300" height="300"></canvas>
+            </div>
+            <div class="canvas-container">
+                <h4>Phép chiếu Oxyt</h4>
+                <canvas id="canvasOxyt" width="300" height="300"></canvas>
+            </div>
+            <div class="canvas-container">
+                <h4>Phép chiếu Oyzt</h4>
+                <canvas id="canvasOyzt" width="300" height="300"></canvas>
+            </div>
+             <div class="canvas-container">
+                <h4>Phép chiếu Oxzt</h4>
+                <canvas id="canvasOxzt" width="300" height="300"></canvas>
+            </div>
+            <p style="grid-column: 1 / -1; text-align: center; font-style: italic;">Kéo chuột để xoay, lăn chuột để phóng to/thu nhỏ.</p>
+        </div>
+    </div>
+
+    <script>
+        const kSlider = document.getElementById('k_slider');
+        const lSlider = document.getElementById('l_slider');
+        const iterationsInput = document.getElementById('iterations');
+        const ifsEqDiv = document.getElementById('ifs-equations');
+        const kValueSpan = document.getElementById('k_value');
+        const lValueSpan = document.getElementById('l_value');
+
+        // Setup các canvas và trạng thái ban đầu (bao gồm cả zoom)
+        const projections = {
+            Oxyz: { canvas: document.getElementById('canvasOxyz'), rotation: { x: 0.5, y: -0.5 }, zoom: 250, axes: ['x','y','z'] },
+            Oxyt: { canvas: document.getElementById('canvasOxyt'), rotation: { x: 0.5, y: -0.5 }, zoom: 250, axes: ['x','y','t'] },
+            Oyzt: { canvas: document.getElementById('canvasOyzt'), rotation: { x: 0.5, y: -0.5 }, zoom: 250, axes: ['y','z','t'] },
+            Oxzt: { canvas: document.getElementById('canvasOxzt'), rotation: { x: 0.5, y: -0.5 }, zoom: 250, axes: ['x','z','t'] }
+        };
+        Object.values(projections).forEach(proj => { proj.ctx = proj.canvas.getContext('2d'); });
+
+        // Hàm chiếu 3D -> 2D
+        function project3Dto2D(p, rX, rY) {
+            const cosY = Math.cos(rY), sinY = Math.sin(rY);
+            const cosX = Math.cos(rX), sinX = Math.sin(rX);
+            let tempZ = p.x * sinY + p.z * cosY;
+            const tempX = p.x * cosY - p.z * sinY;
+            const tempY = p.y * cosX - tempZ * sinX;
+            tempZ = p.y * sinX + tempZ * cosX;
+            const fov = 300;
+            const scale = fov / (fov + tempZ * 200);
+            return { x: tempX * scale, y: tempY * scale, scale: scale };
+        }
+
+        let points4D = [];
+        let animationFrameId = null;
+
+        function scheduleDraw() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = requestAnimationFrame(main);
+        }
+
+        function main() {
+            generatePoints();
+            drawAllProjections();
+        }
+        
+        function generatePoints() {
+            const k = parseFloat(kSlider.value);
+            const l = parseFloat(lSlider.value);
+            const iterations = parseInt(iterationsInput.value) || 100000;
+            
+            kValueSpan.textContent = k.toFixed(2);
+            lValueSpan.textContent = l.toFixed(2);
+
+            ifsEqDiv.innerHTML = `\\(f_1: z' = ky+0.5z, t' = ly+0.5t \\)
+                                 <br>
+                                 \\(f_2: z' = -ky+0.5z+k, t' = -ly+0.5t+l \\)
+                                 <br>
+                                 (với \\(x' = 0.5y, y' = x\\) hoặc \\(x' = 0.5y+0.5, y' = x\\))`;
+            MathJax.typesetPromise();
+            
+            const f1 = (p) => ({ 
+                x: 0.5 * p.y, y: p.x,
+                z: k * p.x + 0.5 * p.z, t: l * p.y + 0.5 * p.t
+            });
+            const f2 = (p) => ({ 
+                x: 0.5 * p.y + 0.5, y: p.x,
+                z: -k * p.x + 0.5 * p.z + k, t: -l * p.y + 0.5 * p.t + l
+            });
+            
+            points4D = [];
+            let currentPoint = {x: 0.5, y: 0.5, z: 0.5, t: 0.5};
+            for (let i = 0; i < iterations; i++) {
+                const choice = Math.random() < 0.5;
+                currentPoint = choice ? f1(currentPoint) : f2(currentPoint);
+                if (i > 100) {
+                    points4D.push({point: currentPoint, color: choice ? 'lime' : 'red'});
+                }
+            }
+        }
+
+        function drawAllProjections() {
+            Object.values(projections).forEach(proj => {
+                const axes = proj.axes;
+                const pointSelector = p => ({ x: p[axes[0]]-0.5, y: p[axes[1]]-0.5, z: p[axes[2]]-0.5 });
+                drawSingleProjection(proj, pointSelector);
+            });
+        }
+        
+        function drawSingleProjection(proj, pointSelector) {
+            const ctx = proj.ctx;
+            ctx.clearRect(0, 0, proj.canvas.width, proj.canvas.height);
+            ctx.save();
+            ctx.translate(proj.canvas.width / 2, proj.canvas.height / 2);
+
+            for(const item of points4D) {
+                const point3D = pointSelector(item.point);
+                const p2d = project3Dto2D(point3D, proj.rotation.x, proj.rotation.y);
+                const size = Math.max(0.5, p2d.scale);
+                ctx.fillStyle = item.color;
+                ctx.globalAlpha = Math.max(0.05, p2d.scale * 0.5);
+                ctx.fillRect(p2d.x * proj.zoom, -p2d.y * proj.zoom, size, size);
+            }
+            ctx.restore();
+        }
+
+        // --- Xử lý sự kiện Tương tác (Xoay và Phóng to) ---
+        Object.values(projections).forEach(proj => {
+            let isDragging = false, lastMouseX = 0, lastMouseY = 0;
+            proj.canvas.addEventListener('mousedown', (e) => { isDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; });
+            proj.canvas.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    proj.rotation.y += (e.clientX - lastMouseX) * 0.01;
+                    proj.rotation.x += (e.clientY - lastMouseY) * 0.01;
+                    lastMouseX = e.clientX; lastMouseY = e.clientY;
+                    requestAnimationFrame(drawAllProjections);
+                }
+            });
+            // Xử lý sự kiện lăn chuột để phóng to/thu nhỏ
+            proj.canvas.addEventListener('wheel', (e) => {
+                e.preventDefault(); // Ngăn trang web cuộn
+                const zoomFactor = 1.1;
+                if (e.deltaY < 0) {
+                    proj.zoom *= zoomFactor; // Phóng to
+                } else {
+                    proj.zoom /= zoomFactor; // Thu nhỏ
+                }
+                // Giới hạn mức zoom để tránh quá lớn hoặc quá nhỏ
+                proj.zoom = Math.max(50, Math.min(800, proj.zoom));
+                requestAnimationFrame(drawAllProjections);
+            });
+        });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        // Lắng nghe sự kiện của các điều khiển
+        kSlider.addEventListener('input', scheduleDraw);
+        lSlider.addEventListener('input', scheduleDraw);
+        iterationsInput.addEventListener('change', scheduleDraw);
+
+        // Chạy lần đầu
+        main();
+    </script>
+</body>
+</html>
