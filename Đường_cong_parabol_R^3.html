@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TIÊU ĐỀ MỚI -->
+    <title>Attractor là Đường cong bậc 2 trong R^3</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden; /* Ngăn cuộn trang */
+        }
+
+        /* BỐ CỤC FLEXBOX CHIA ĐÔI MÀN HÌNH */
+        #container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #info-panel {
+            flex: 0 0 50%; /* Panel thông tin chiếm 50% chiều rộng, không co giãn */
+            padding: 25px;
+            background-color: #2c2c2c;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column; /* Sắp xếp nội dung theo chiều dọc */
+        }
+        
+        #canvas-container {
+            flex-grow: 1; /* Canvas chiếm hết phần còn lại */
+            position: relative; /* Cần thiết để canvas bên trong có thể lấy kích thước */
+        }
+
+        h1 {
+            color: #4fc3f7;
+            margin-top: 0;
+            font-size: 1.8em;
+            text-align: center;
+        }
+        p {
+            line-height: 1.6;
+            font-size: 1.1em;
+        }
+        .slider-container {
+            margin: 20px 0;
+        }
+        label {
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        #equations {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 1.2em; /* Tăng kích thước font cho dễ đọc */
+            flex-grow: 1; /* Giúp phần này chiếm hết không gian dọc còn lại */
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Căn giữa công thức theo chiều dọc */
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- NỬA BÊN TRÁI: THÔNG TIN VÀ ĐIỀU KHIỂN -->
+        <div id="info-panel">
+            <h1>Attractor là Đường cong bậc 2 trong R³</h1>
+            <p>
+                Mô hình này minh họa attractor của một Hệ hàm lặp 3D, được tạo ra bằng cách "dập khuôn" một mặt phẳng. 
+                Sử dụng slider để điều khiển tham số <b>k</b>, quyết định độ cong của mặt fractal.
+            </p>
+            
+            <div class="slider-container">
+                <label for="k-slider">Tham số k = <span id="k-value">1.0</span></label>
+                <input type="range" id="k-slider" min="-4" max="4" value="1" step="0.1">
+            </div>
+
+            <div id="equations">
+                <!-- MathJax sẽ render công thức ở đây -->
+            </div>
+        </div>
+
+        <!-- NỬA BÊN PHẢI: KHUNG VẼ 3D -->
+        <div id="canvas-container"></div>
+    </div>
+
+    <!-- Tải MathJax -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
+
+    <!-- Tải Three.js và các điều khiển -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObject = null;
+        const NUM_POINTS = 75000;
+
+        const kSlider = document.getElementById('k-slider');
+        const kValueSpan = document.getElementById('k-value');
+        const equationsDiv = document.getElementById('equations');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        // --- Cập nhật công thức MathJax ---
+        function updateMathJax(k) {
+            const k_str = k.toFixed(2);
+            const k4_str = (k / 4).toFixed(3);
+            const neg_k4_str = (-k / 4).toFixed(3);
+
+            const latexString = `
+                <p style="color:#76ff03; margin-bottom:0.5em;">Hàm co $f_1$ (màu xanh lá):</p>
+                $$
+                \\mathbf{f}_1 \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix} = 
+                \\begin{pmatrix} 1/2 & 0 & 0 \\\\ 0 & 1 & 0 \\\\ ${k4_str} & 0 & 1/4 \\end{pmatrix} 
+                \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix}
+                $$
+                <p style="color:#ff1744; margin-top:2em; margin-bottom:0.5em;">Hàm co $f_2$ (màu đỏ tươi):</p>
+                $$
+                \\mathbf{f}_2 \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix} = 
+                \\begin{pmatrix} 1/2 & 0 & 0 \\\\ 0 & 1 & 0 \\\\ ${neg_k4_str} & 0 & 1/4 \\end{pmatrix} 
+                \\begin{pmatrix} x \\\\ y \\\\ z \\end{pmatrix} +
+                \\begin{pmatrix} 1/2 \\\\ 0 \\\\ ${k4_str} \\end{pmatrix}
+                $$
+            `;
+            equationsDiv.innerHTML = latexString;
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typesetPromise([equationsDiv]).catch((err) => console.log('MathJax error:', err));
+            }
+        }
+
+        // --- Tạo Attractor Fractal ---
+        function generateFractal(k) {
+            if (pointsObject) {
+                scene.remove(pointsObject);
+                pointsObject.geometry.dispose();
+                pointsObject.material.dispose();
+            }
+
+            const positions = [];
+            const colors = [];
+            const color_f1 = new THREE.Color(0x76ff03); // Xanh lá
+            const color_f2 = new THREE.Color(0xff1744); // Đỏ tươi
+
+            let p = { x: Math.random(), y: Math.random(), z: Math.random() };
+
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nx, ny, nz;
+                if (Math.random() < 0.5) {
+                    nx = 0.5 * p.x;
+                    ny = p.y;
+                    nz = (k / 4) * p.x + 0.25 * p.z;
+                    colors.push(color_f1.r, color_f1.g, color_f1.b);
+                } else {
+                    nx = 0.5 * p.x + 0.5;
+                    ny = p.y;
+                    nz = (-k / 4) * p.x + 0.25 * p.z + (k / 4);
+                    colors.push(color_f2.r, color_f2.g, color_f2.b);
+                }
+                p = { x: nx, y: ny, z: nz };
+                positions.push(p.x, p.y, p.z);
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.computeBoundingBox();
+            const center = new THREE.Vector3();
+            geometry.boundingBox.getCenter(center);
+            geometry.translate(-center.x, -center.y, -center.z);
+
+            const material = new THREE.PointsMaterial({
+                size: 0.015,
+                vertexColors: true
+            });
+            
+            pointsObject = new THREE.Points(geometry, material);
+            scene.add(pointsObject);
+        }
+
+        function createAxisLabel(text, color, position) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const size = 64;
+            canvas.width = size;
+            canvas.height = size;
+            
+            context.font = `Bold ${size/2}px Arial`;
+            context.fillStyle = color;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, size / 2, size / 2);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(0.25, 0.25, 1.0);
+            sprite.position.copy(position);
+
+            return sprite;
+        }
+
+        function createLabeledAxes(size) {
+            const group = new THREE.Group();
+            const axesHelper = new THREE.AxesHelper(size);
+            group.add(axesHelper);
+
+            const materialX = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const materialY = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const materialZ = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+
+            const coneRadius = size * 0.03;
+            const coneHeight = size * 0.1;
+            const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+            
+            const arrowX = new THREE.Mesh(coneGeometry, materialX);
+            arrowX.position.set(size, 0, 0);
+            arrowX.rotation.z = -Math.PI / 2;
+            group.add(arrowX);
+
+            const arrowY = new THREE.Mesh(coneGeometry, materialY);
+            arrowY.position.set(0, size, 0);
+            group.add(arrowY);
+
+            const arrowZ = new THREE.Mesh(coneGeometry, materialZ);
+            arrowZ.position.set(0, 0, size);
+            arrowZ.rotation.x = Math.PI / 2;
+            group.add(arrowZ);
+
+            const labelX = createAxisLabel('X', '#ff7777', new THREE.Vector3(size + coneHeight + 0.05, 0, 0));
+            const labelY = createAxisLabel('Y', '#77ff77', new THREE.Vector3(0, size + coneHeight + 0.05, 0));
+            const labelZ = createAxisLabel('Z', '#7777ff', new THREE.Vector3(0, 0, size + coneHeight + 0.05));
+            group.add(labelX, labelY, labelZ);
+
+            return group;
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(0.5, 0.5, 1.5);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0.1, 0);
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+            scene.add(ambientLight);
+            
+            const labeledAxes = createLabeledAxes(1);
+            scene.add(labeledAxes);
+
+            kSlider.addEventListener('input', () => {
+                const k = parseFloat(kSlider.value);
+                kValueSpan.textContent = k.toFixed(1);
+                updateMathJax(k);
+                generateFractal(k);
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+
+            updateMathJax(parseFloat(kSlider.value));
+            generateFractal(parseFloat(kSlider.value));
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // CẬP NHẬT: Thay đổi kích thước dựa trên container thay vì toàn bộ cửa sổ
+        function onWindowResize() {
+            if (canvasContainer) {
+                camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
