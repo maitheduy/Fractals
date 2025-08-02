@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ hàm IFS tuyến tính 2 hàm co cho một lớp mặt cong bậc 2</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 50%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        
+        #controls-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+        .slider-group label { font-weight: bold; font-size: 1.1em; }
+        .slider-group input { width: 100%; cursor: pointer; }
+        .calculated-param { padding: 5px; background-color: #3a3a3a; border-radius: 4px; text-align: center; }
+
+        #equation-display-container { padding: 10px; background-color: #3a3a3a; border-radius: 8px; text-align: center; font-size: 1.1em; border: 1px solid #4fc3f7; font-family: 'Courier New', Courier, monospace; min-height: 2em; display:flex; align-items:center; justify-content:center;}
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.5em; font-weight: bold; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Hệ hàm IFS tuyến tính 2 hàm co cho một lớp mặt cong bậc 2</h1>
+            
+            <!-- CÂU MÔ TẢ ĐÃ ĐƯỢC CẬP NHẬT -->
+            <p>
+                Kiến tạo attractor cho mặt bậc hai $z = F(x,y) = Ax^2 + Bxy + Cy^2 + Dx + Ey + F$, bằng hệ IFS tuyến tính, với ràng buộc $\mathbf{A = 2C}$ và $\mathbf{F=0}$.
+            </p>
+            
+            <div id="equation-display-container"></div>
+
+            <div id="controls-container">
+                <div class="slider-group calculated-param"><label>A (tính theo C): <span id="A-val">-2.0</span></label></div>
+                <div class="slider-group"><label>B (hệ số xy): <span id="B-val">0.0</span></label><input type="range" id="B-slider" min="-10" max="10" value="0" step="0.1"></div>
+                <div class="slider-group"><label>C (hệ số y²): <span id="C-val">-1.0</span></label><input type="range" id="C-slider" min="-5" max="5" value="-1" step="0.1"></div>
+                <div class="slider-group"><label>D (hệ số x): <span id="D-val">2.0</span></label><input type="range" id="D-slider" min="-10" max="10" value="2" step="0.1"></div>
+                <div class="slider-group"><label>E (hệ số y): <span id="E-val">1.0</span></label><input type="range" id="E-slider" min="-10" max="10" value="1" step="0.1"></div>
+                <div class="slider-group calculated-param"><label>F (hằng số): <span>0.0</span></label></div>
+            </div>
+
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = { f1: null, f2: null };
+        const NUM_POINTS = 100000;
+
+        const canvasContainer = document.getElementById('canvas-container');
+        const sliders = {
+            B: document.getElementById('B-slider'), C: document.getElementById('C-slider'),
+            D: document.getElementById('D-slider'), E: document.getElementById('E-slider')
+        };
+        const values = {
+            A: document.getElementById('A-val'), B: document.getElementById('B-val'),
+            C: document.getElementById('C-val'), D: document.getElementById('D-val'),
+            E: document.getElementById('E-val')
+        };
+        const equationDisplay = document.getElementById('equation-display-container');
+        const equationsDiv = document.getElementById('equations');
+
+        function updateEquationDisplay(params) {
+            const formatTerm = (coeff, termStr) => (Math.abs(coeff) < 0.01) ? '' : `${coeff > 0 ? ' + ' : ' - '}${Math.abs(coeff).toFixed(2)}${termStr}`;
+            let eqStr = `z = ${params.A.toFixed(2)}x²${formatTerm(params.B, 'xy')}${formatTerm(params.C, 'y²')}${formatTerm(params.D, 'x')}${formatTerm(params.E, 'y')}`.replace(/^z =  \+ /g, 'z = ');
+            equationDisplay.textContent = eqStr;
+        }
+
+        function updateMathJax(coeffs) {
+            const M1 = `\\begin{pmatrix} 0 & 0.5 & 0 \\\\ 1 & 0 & 0 \\\\ ${coeffs.a1.toFixed(2)} & ${coeffs.b1.toFixed(2)} & 0.5 \\end{pmatrix}`;
+            const M2 = `\\begin{pmatrix} 0 & 0.5 & 0 \\\\ 1 & 0 & 0 \\\\ ${coeffs.a2.toFixed(2)} & ${coeffs.b2.toFixed(2)} & 0.5 \\end{pmatrix}`;
+            const t2 = `\\begin{pmatrix} 0.5 \\\\ 0 \\\\ ${coeffs.d2.toFixed(2)} \\end{pmatrix}`;
+            equationsDiv.innerHTML = `<p class="equation-title" style="color:#76ff03;">Hàm co $f_1$:</p>$$ \\mathbf{f}_1(\\mathbf{p}) = ${M1} \\mathbf{p} $$<p class="equation-title" style="color:#ff1744;">Hàm co $f_2$:</p>$$ \\mathbf{f}_2(\\mathbf{p}) = ${M2} \\mathbf{p} + ${t2} $$`;
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typesetPromise([equationsDiv]).catch((err) => console.log('MathJax error:', err));
+            }
+        }
+        
+        function generateFractal(coeffs) {
+            Object.values(pointsObjects).forEach(obj => { if (obj) { obj.geometry.dispose(); obj.material.dispose(); scene.remove(obj); } });
+            pointsObjects = { f1: null, f2: null };
+            const positions_f1 = [], positions_f2 = [];
+            let p = { x: 0.1, y: 0.1, z: 0.0 };
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nx, ny, nz;
+                if (Math.random() < 0.5) { 
+                    nx = 0.5 * p.y; ny = p.x; nz = coeffs.a1 * p.x + coeffs.b1 * p.y + 0.5 * p.z;
+                    p = { x: nx, y: ny, z: nz }; if (i > 20) positions_f1.push(p.x, p.y, p.z);
+                } else { 
+                    nx = 0.5 * p.y + 0.5; ny = p.x; nz = coeffs.a2 * p.x + coeffs.b2 * p.y + 0.5 * p.z + coeffs.d2;
+                    p = { x: nx, y: ny, z: nz }; if (i > 20) positions_f2.push(p.x, p.y, p.z);
+                }
+            }
+            if (positions_f1.length > 0) {
+                const geom1 = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions_f1, 3));
+                pointsObjects.f1 = new THREE.Points(geom1, new THREE.PointsMaterial({ color: 0x76ff03, size: 0.015 }));
+                scene.add(pointsObjects.f1);
+            }
+            if (positions_f2.length > 0) {
+                const geom2 = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions_f2, 3));
+                pointsObjects.f2 = new THREE.Points(geom2, new THREE.PointsMaterial({ color: 0xff1744, size: 0.015 }));
+                scene.add(pointsObjects.f2);
+            }
+        }
+        
+        function regenerate() {
+            const params = {F: 0}; // F is always 0
+            for (const key in sliders) {
+                params[key] = parseFloat(sliders[key].value);
+                values[key].textContent = params[key].toFixed(1);
+            }
+            params.A = 2 * params.C; // Apply the core constraint
+            values.A.textContent = params.A.toFixed(1);
+            
+            updateEquationDisplay(params);
+
+            const { A, B, C, D, E } = params; // F is 0
+            const coeffs = {
+                a1: E - 0.5*D,
+                b1: 0.5*D - 0.5*E,
+                a2: E + 0.5*B - 0.5*D,
+                b2: C + 0.5*D - 0.5*E, // A is substituted with 2C
+                d2: 0.5*C + 0.5*D      // A is substituted with 2C
+            };
+            
+            updateMathJax(coeffs);
+            generateFractal(coeffs);
+        }
+
+        function createLabeledAxes(size) {
+            const group = new THREE.Group(); const axesHelper = new THREE.AxesHelper(size); group.add(axesHelper);
+            const materialX = new THREE.MeshBasicMaterial({ color: 0xff0000 }); const materialY = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); const materialZ = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            const coneRadius = size * 0.03; const coneHeight = size * 0.1; const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+            const arrowX = new THREE.Mesh(coneGeometry, materialX); arrowX.position.set(size, 0, 0); arrowX.rotation.z = -Math.PI / 2; group.add(arrowX);
+            const arrowY = new THREE.Mesh(coneGeometry, materialY); arrowY.position.set(0, size, 0); group.add(arrowY);
+            const arrowZ = new THREE.Mesh(coneGeometry, materialZ); arrowZ.position.set(0, 0, size); arrowZ.rotation.x = Math.PI / 2; group.add(arrowZ);
+            const createAxisLabel = (text, color, position) => { const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const size = 64; canvas.width = size; canvas.height = size; context.font = `Bold ${size/2}px Arial`; context.fillStyle = color; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(text, size / 2, size / 2); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(0.3, 0.3, 1.0); sprite.position.copy(position); return sprite; };
+            group.add(createAxisLabel('X', '#ff7777', new THREE.Vector3(size + coneHeight, 0, 0)), createAxisLabel('Y', '#77ff77', new THREE.Vector3(0, size + coneHeight, 0)), createAxisLabel('Z', '#7777ff', new THREE.Vector3(0, 0, size + coneHeight)));
+            return group;
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(2, 2, 2);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0, 0);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(1, 1, 1); scene.add(directionalLight);
+            scene.add(createLabeledAxes(2));
+            
+            for (const key in sliders) {
+                sliders[key].addEventListener('input', regenerate);
+            }
+            window.addEventListener('resize', () => { if (canvasContainer) { camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); }});
+            
+            if (window.MathJax && window.MathJax.typeset) {
+                 MathJax.typesetPromise([document.getElementById('equations')]).catch((err) => console.log('MathJax error:', err));
+            }
+            regenerate();
+            (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+        }
+
+        init();
+    </script>
+</body>
+</html>
