@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phòng thí nghiệm Fractal Bậc hai</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 50%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        
+        #controls-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .slider-group label { font-weight: bold; font-size: 1.1em; }
+        .slider-group input { width: 100%; cursor: pointer; }
+        
+        #equation-display-container { padding: 10px; background-color: #3a3a3a; border-radius: 8px; text-align: center; font-size: 1.1em; border: 1px solid #4fc3f7; font-family: 'Courier New', Courier, monospace; min-height: 2em; display:flex; align-items:center; justify-content:center;}
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; /* Đẩy xuống dưới */ font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.5em; font-weight: bold; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Phòng thí nghiệm Fractal Bậc hai</h1>
+            <p>Sử dụng các thanh trượt để điều khiển các hệ số của mặt cong bậc hai $z=F(x,y)$. Attractor sẽ được tự động tạo ra dựa trên hàm $F$ mà bạn thiết kế.</p>
+            
+            <div id="equation-display-container"></div>
+
+            <div id="controls-container">
+                <div class="slider-group"><label>A (hệ số x²): <span id="A-val">1.0</span></label><input type="range" id="A-slider" min="-5" max="5" value="1" step="0.1"></div>
+                <div class="slider-group"><label>B (hệ số xy): <span id="B-val">0.0</span></label><input type="range" id="B-slider" min="-5" max="5" value="0" step="0.1"></div>
+                <div class="slider-group"><label>C (hệ số y²): <span id="C-val">-1.0</span></label><input type="range" id="C-slider" min="-5" max="5" value="-1" step="0.1"></div>
+                <div class="slider-group"><label>D (hệ số x): <span id="D-val">0.0</span></label><input type="range" id="D-slider" min="-5" max="5" value="0" step="0.1"></div>
+                <div class="slider-group"><label>E (hệ số y): <span id="E-val">0.0</span></label><input type="range" id="E-slider" min="-5" max="5" value="0" step="0.1"></div>
+                <div class="slider-group"><label>F (hằng số): <span id="F-val">0.0</span></label><input type="range" id="F-slider" min="-3" max="3" value="0" step="0.1"></div>
+            </div>
+
+            <div id="equations">
+                <p class="equation-title" style="color:#76ff03;">Hàm co $f_1$:</p>
+                $$ \mathbf{f}_1(\mathbf{p}) = \mathbf{A}\mathbf{p} + \begin{pmatrix} -0.5 \\ 0 \\ F(0.5y-0.5, x) \end{pmatrix} $$
+                <p class="equation-title" style="color:#ff1744;">Hàm co $f_2$:</p>
+                $$ \mathbf{f}_2(\mathbf{p}) = \mathbf{A}\mathbf{p} + \begin{pmatrix} 0.5 \\ 0 \\ F(0.5y+0.5, x) \end{pmatrix} $$
+            </div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = { f1: null, f2: null };
+        const NUM_POINTS = 75000; // Giảm một chút để tương tác mượt hơn
+
+        const canvasContainer = document.getElementById('canvas-container');
+        const sliders = {
+            A: document.getElementById('A-slider'), B: document.getElementById('B-slider'),
+            C: document.getElementById('C-slider'), D: document.getElementById('D-slider'),
+            E: document.getElementById('E-slider'), F: document.getElementById('F-slider')
+        };
+        const values = {
+            A: document.getElementById('A-val'), B: document.getElementById('B-val'),
+            C: document.getElementById('C-val'), D: document.getElementById('D-val'),
+            E: document.getElementById('E-val'), F: document.getElementById('F-val')
+        };
+        const equationDisplay = document.getElementById('equation-display-container');
+
+        function updateEquationDisplay(params) {
+            let terms = [];
+            const formatTerm = (coeff, termStr) => {
+                if (Math.abs(coeff) < 0.01) return '';
+                const sign = coeff > 0 ? ' + ' : ' - ';
+                const val = Math.abs(coeff).toFixed(2);
+                return `${sign}${val}${termStr}`;
+            };
+            
+            terms.push(params.A.toFixed(2) + 'x²');
+            terms.push(formatTerm(params.B, 'xy'));
+            terms.push(formatTerm(params.C, 'y²'));
+            terms.push(formatTerm(params.D, 'x'));
+            terms.push(formatTerm(params.E, 'y'));
+            terms.push(formatTerm(params.F, ''));
+
+            let eqStr = 'z = ' + terms.join('').replace(/^ \+ /, '');
+            equationDisplay.textContent = eqStr;
+        }
+
+        function generateFractal(F_func) {
+            Object.values(pointsObjects).forEach(obj => { if (obj) { obj.geometry.dispose(); obj.material.dispose(); scene.remove(obj); } });
+            pointsObjects = { f1: null, f2: null };
+            
+            const G1_func = (x, y) => F_func(0.5 * y - 0.5, x);
+            const G2_func = (x, y) => F_func(0.5 * y + 0.5, x);
+
+            const positions_f1 = [], positions_f2 = [];
+            let p = { x: 0.1, y: 0.1, z: 0.0 };
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nx, ny, nz;
+                if (Math.random() < 0.5) { 
+                    nx = 0.5 * p.y - 0.5; ny = p.x; nz = G1_func(p.x, p.y);
+                    p = { x: nx, y: ny, z: nz }; if (i > 20) positions_f1.push(p.x, p.y, p.z);
+                } else { 
+                    nx = 0.5 * p.y + 0.5; ny = p.x; nz = G2_func(p.x, p.y);
+                    p = { x: nx, y: ny, z: nz }; if (i > 20) positions_f2.push(p.x, p.y, p.z);
+                }
+            }
+            if (positions_f1.length > 0) {
+                const geom1 = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions_f1, 3));
+                pointsObjects.f1 = new THREE.Points(geom1, new THREE.PointsMaterial({ color: 0x76ff03, size: 0.015 }));
+                scene.add(pointsObjects.f1);
+            }
+            if (positions_f2.length > 0) {
+                const geom2 = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions_f2, 3));
+                pointsObjects.f2 = new THREE.Points(geom2, new THREE.PointsMaterial({ color: 0xff1744, size: 0.015 }));
+                scene.add(pointsObjects.f2);
+            }
+        }
+        
+        function regenerate() {
+            const params = {};
+            for (const key in sliders) {
+                params[key] = parseFloat(sliders[key].value);
+                values[key].textContent = params[key].toFixed(1);
+            }
+            updateEquationDisplay(params);
+            const F_func = (x, y) => params.A*x*x + params.B*x*y + params.C*y*y + params.D*x + params.E*y + params.F;
+            generateFractal(F_func);
+        }
+
+        function createLabeledAxes(size) {
+            const group = new THREE.Group(); const axesHelper = new THREE.AxesHelper(size); group.add(axesHelper);
+            const materialX = new THREE.MeshBasicMaterial({ color: 0xff0000 }); const materialY = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); const materialZ = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            const coneRadius = size * 0.03; const coneHeight = size * 0.1; const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+            const arrowX = new THREE.Mesh(coneGeometry, materialX); arrowX.position.set(size, 0, 0); arrowX.rotation.z = -Math.PI / 2; group.add(arrowX);
+            const arrowY = new THREE.Mesh(coneGeometry, materialY); arrowY.position.set(0, size, 0); group.add(arrowY);
+            const arrowZ = new THREE.Mesh(coneGeometry, materialZ); arrowZ.position.set(0, 0, size); arrowZ.rotation.x = Math.PI / 2; group.add(arrowZ);
+            const createAxisLabel = (text, color, position) => { const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const size = 64; canvas.width = size; canvas.height = size; context.font = `Bold ${size/2}px Arial`; context.fillStyle = color; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(text, size / 2, size / 2); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(0.3, 0.3, 1.0); sprite.position.copy(position); return sprite; };
+            group.add(createAxisLabel('X', '#ff7777', new THREE.Vector3(size + coneHeight, 0, 0)), createAxisLabel('Y', '#77ff77', new THREE.Vector3(0, size + coneHeight, 0)), createAxisLabel('Z', '#7777ff', new THREE.Vector3(0, 0, size + coneHeight)));
+            return group;
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(2, 2, 2);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0, 0);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(1, 1, 1); scene.add(directionalLight);
+            scene.add(createLabeledAxes(2));
+            
+            for (const key in sliders) {
+                sliders[key].addEventListener('input', regenerate);
+            }
+            window.addEventListener('resize', () => { if (canvasContainer) { camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); }});
+            
+            if (window.MathJax && window.MathJax.typeset) {
+                 MathJax.typesetPromise([document.getElementById('equations')]).catch((err) => console.log('MathJax error:', err));
+            }
+            regenerate();
+            (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+        }
+
+        init();
+    </script>
+</body>
+</html>
