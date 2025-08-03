@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fractal "Dát Vàng" Mặt Xuyến (Torus)</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 45%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        
+        .control-group { margin: 15px 0; }
+        label { font-weight: bold; font-size: 1.1em; display: block; margin-bottom: 5px;}
+        .slider-container { display: flex; align-items: center; gap: 15px; }
+        .slider-container input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-container input[type="number"] { width: 70px; padding: 5px; background-color: #555; color: #fff; border: 1px solid #777; border-radius: 4px; font-size: 1em; }
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.0em; font-weight: bold; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Fractal "Dát Vàng" Mặt Xuyến (Torus)</h1>
+            <p>
+                Mô hình này sử dụng attractor 2D làm "hoa văn" để "dát" lên bề mặt của một <strong>Mặt Xuyến (Torus)</strong>.
+            </p>
+            
+            <div class="control-group">
+                <label for="k-slider">Tham số Fractal (k) = <span id="k-value">0.50</span></label>
+                <div class="slider-container">
+                    <input type="range" id="k-slider" min="0" max="1" value="0.5" step="0.01">
+                </div>
+            </div>
+             <div class="control-group">
+                <label for="R-slider">Bán kính lớn (R) = <span id="R-value">1.5</span></label>
+                <div class="slider-container">
+                    <input type="range" id="R-slider" min="1" max="3" value="1.5" step="0.05">
+                </div>
+            </div>
+             <div class="control-group">
+                <label for="r-slider">Bán kính nhỏ (r) = <span id="r-value">0.5</span></label>
+                <div class="slider-container">
+                    <input type="range" id="r-slider" min="0.1" max="1.5" value="0.5" step="0.05">
+                </div>
+            </div>
+
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = { f1: null, f2: null };
+        let backgroundTorus = null;
+        const NUM_POINTS = 150000;
+
+        const kSlider = document.getElementById('k-slider');
+        const kValueSpan = document.getElementById('k-value');
+        const RSlider = document.getElementById('R-slider');
+        const RValueSpan = document.getElementById('R-value');
+        const rSlider = document.getElementById('r-slider');
+        const rValueSpan = document.getElementById('r-value');
+        const equationsDiv = document.getElementById('equations');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        function updateMathJax(k, p1, p2) {
+            const mapping = `\\mathbf{M}(u,v) = 
+            \\begin{cases} 
+                x = (R + r \\cos(v)) \\cos(u) \\\\ 
+                y = (R + r \\cos(v)) \\sin(u) \\\\ 
+                z = r \\sin(v)
+            \\end{cases}`;
+
+            equationsDiv.innerHTML = `
+                <p class="equation-title">Hệ IFS trên không gian tham số [0, 2π]²:</p>
+                <p>Xác suất là p1=k, p2=1-k</p>
+                <p class="equation-title">Hàm Ánh xạ lên Mặt Xuyến:</p>
+                $$ ${mapping} $$
+            `;
+
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                MathJax.typesetPromise([equationsDiv]).catch((err) => console.log('MathJax error:', err));
+            }
+        }
+
+        // <-- THAY ĐỔI: Hàm ánh xạ lên Torus
+        function mapToTorus(u_param, v_param, R, r) {
+            const u = u_param * 2 * Math.PI; // Ánh xạ [0,1] -> [0, 2pi]
+            const v = v_param * 2 * Math.PI;
+
+            const x = (R + r * Math.cos(v)) * Math.cos(u);
+            const y = (R + r * Math.cos(v)) * Math.sin(u);
+            const z = r * Math.sin(v);
+            return {x, y, z};
+        }
+
+        function generateFractal() {
+            Object.values(pointsObjects).forEach(obj => { if (obj) { obj.geometry.dispose(); obj.material.dispose(); scene.remove(obj); } });
+            pointsObjects = { f1: null, f2: null };
+            if (backgroundTorus) { scene.remove(backgroundTorus); backgroundTorus.geometry.dispose(); }
+
+            const k = parseFloat(kSlider.value);
+            const p1 = k;
+            const R = parseFloat(RSlider.value);
+            const r = parseFloat(rSlider.value);
+
+            const positions_f1 = [], positions_f2 = [];
+            let p_uv = { u: Math.random(), v: Math.random() };
+            
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nu, nv, targetArray;
+                if (Math.random() < p1) {
+                    nu = p_uv.v; nv = k * p_uv.u;
+                    targetArray = positions_f1;
+                } else {
+                    nu = p_uv.v; nv = (1 - k) * p_uv.u + k;
+                    targetArray = positions_f2;
+                }
+                p_uv = { u: nu, v: nv };
+                if (i > 20) {
+                    const p3d = mapToTorus(p_uv.u, p_uv.v, R, r);
+                    targetArray.push(p3d.x, p3d.y, p3d.z);
+                }
+            }
+            
+            const createPoints = (pos, color) => {
+                if (pos.length === 0) return null;
+                const geom = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                return new THREE.Points(geom, new THREE.PointsMaterial({ color: color, size: 0.015 }));
+            };
+            
+            pointsObjects.f1 = createPoints(positions_f1, 0x76ff03);
+            pointsObjects.f2 = createPoints(positions_f2, 0xff1744);
+            Object.values(pointsObjects).forEach(obj => { if (obj) scene.add(obj); });
+            
+            // Vẽ nền mờ cho Torus
+            const torusGeom = new THREE.TorusGeometry(R, r, 32, 100);
+            const torusMat = new THREE.MeshStandardMaterial({color: 0x444444, wireframe: true, transparent: true, opacity: 0.2});
+            backgroundTorus = new THREE.Mesh(torusGeom, torusMat);
+            scene.add(backgroundTorus);
+
+            // Căn chỉnh camera
+            const allPositions = [...positions_f1, ...positions_f2];
+            if (allPositions.length > 0) {
+                const combinedGeometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(allPositions, 3));
+                combinedGeometry.computeBoundingSphere();
+                const sphere = combinedGeometry.boundingSphere;
+                controls.target.copy(sphere.center);
+                const distance = sphere.radius / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+                camera.position.copy(sphere.center).add(new THREE.Vector3(0, 0, distance * 2));
+                camera.lookAt(sphere.center);
+                combinedGeometry.dispose();
+            }
+        }
+        
+        function regenerate() {
+            const k = parseFloat(kSlider.value);
+            const R = parseFloat(RSlider.value);
+            const r = parseFloat(rSlider.value);
+            kValueSpan.textContent = k.toFixed(2);
+            RValueSpan.textContent = R.toFixed(2);
+            rValueSpan.textContent = r.toFixed(2);
+            const p1 = k, p2 = 1 - k;
+            updateMathJax(k, p1, p2);
+            generateFractal();
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(3, 3, 3);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); directionalLight.position.set(5, 10, 7.5); scene.add(directionalLight);
+
+            // Thiết lập các trình nghe sự kiện
+            [kSlider, RSlider, rSlider].forEach(slider => {
+                slider.addEventListener('input', regenerate);
+            });
+
+            window.addEventListener('resize', () => {
+                if (canvasContainer) {
+                    camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+                }
+            });
+            
+            regenerate();
+            (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+        }
+
+        init();
+    </script>
+</body>
+</html>```
