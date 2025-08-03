@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attractor Hình Vuông có thể Tịnh tiến</title>
+    <!-- Nạp thư viện MathJax để hiển thị công thức toán học -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #container {
+            display: flex;
+            width: 100%;
+        }
+        #controls {
+            flex: 1;
+            padding: 20px;
+            background-color: #fff;
+            border-right: 2px solid #ccc;
+            overflow-y: auto;
+        }
+        #display {
+            flex: 1;
+            display: flex;
+            flex-direction: column; 
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background-color: #e9e9e9;
+        }
+        #display h2 {
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #333;
+            background-color: #000;
+        }
+        .slider-container {
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .slider-container input[type="range"] {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .slider-container input[type="text"] {
+            width: 50px;
+        }
+        h3 {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .probability-info {
+            font-size: 0.9em;
+            background-color: #fafafa;
+            border-left: 3px solid #007bff;
+            padding: 10px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <h3>Hàm co thứ nhất: \(f_1\)</h3>
+            <p>
+            $$ f_1 \begin{pmatrix} x \\ y \end{pmatrix} = \begin{bmatrix} 0 & 1 \\ k & 0 \end{bmatrix} \begin{pmatrix} x \\ y \end{pmatrix} + \begin{pmatrix} p \\ q \end{pmatrix} $$
+            </p>
+
+            <h3>Hàm co thứ hai: \(f_2\)</h3>
+            <p>
+            $$ f_2 \begin{pmatrix} x \\ y \end{pmatrix} = \begin{bmatrix} 0 & 1 \\ 1-k & 0 \end{bmatrix} \begin{pmatrix} x \\ y \end{pmatrix} + \begin{pmatrix} p \\ q+k \end{pmatrix} $$
+            </p>
+
+            <h3>Tham số co giãn \(k\)</h3>
+            <div class="slider-container">
+                <input type="range" id="kSlider" min="0" max="1" value="0.5" step="0.01">
+                <input type="text" id="kText" value="0.5">
+            </div>
+
+            <h3>Tịnh tiến ngang \(p\)</h3>
+            <div class="slider-container">
+                <input type="range" id="pSlider" min="-1.5" max="1.5" value="0" step="0.05">
+                <input type="text" id="pText" value="0">
+            </div>
+
+            <h3>Tịnh tiến dọc \(q\)</h3>
+            <div class="slider-container">
+                <input type="range" id="qSlider" min="-1.5" max="1.5" value="0" step="0.05">
+                <input type="text" id="qText" value="0">
+            </div>
+
+            <div class="probability-info">
+                <b>Xác suất tác động:</b>
+                <p>Xác suất chọn hàm vẫn giữ nguyên, không phụ thuộc vào véc-tơ tịnh tiến.</p>
+                    <p>\( P(f_1) = k \)</p>
+                    <p>\( P(f_2) = 1 - k \)</p>
+            </div>
+        </div>
+        <div id="display">
+            <h2>Attractor hình vuông có thể tịnh tiến</h2>
+            <canvas id="attractorCanvas" width="600" height="600"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('attractorCanvas');
+        const ctx = canvas.getContext('2d');
+        // Lấy các phần tử điều khiển
+        const kSlider = document.getElementById('kSlider');
+        const kText = document.getElementById('kText');
+        const pSlider = document.getElementById('pSlider');
+        const pText = document.getElementById('pText');
+        const qSlider = document.getElementById('qSlider');
+        const qText = document.getElementById('qText');
+
+        // Khởi tạo các biến trạng thái
+        let k = parseFloat(kSlider.value);
+        let p = parseFloat(pSlider.value);
+        let q = parseFloat(qSlider.value);
+
+        function drawGridAndAxes(offsetX, offsetY) {
+            const gridColor = '#333'; const axisColor = '#666'; const spacing = 50;
+            ctx.strokeStyle = gridColor; ctx.lineWidth = 0.5;
+            for (let x = spacing; x < canvas.width; x += spacing) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+            for (let y = spacing; y < canvas.height; y += spacing) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+            ctx.strokeStyle = axisColor; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, offsetY); ctx.lineTo(canvas.width, offsetY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(offsetX, 0); ctx.lineTo(offsetX, canvas.height); ctx.stroke();
+            const arrowSize = 10; ctx.fillStyle = axisColor;
+            ctx.beginPath(); ctx.moveTo(canvas.width, offsetY); ctx.lineTo(canvas.width - arrowSize, offsetY - arrowSize / 2); ctx.lineTo(canvas.width - arrowSize, offsetY + arrowSize / 2); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(offsetX, 0); ctx.lineTo(offsetX - arrowSize / 2, arrowSize); ctx.lineTo(offsetX + arrowSize / 2, arrowSize); ctx.closePath(); ctx.fill();
+        }
+        
+        function drawAttractor() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Thông số camera/view, giữ nguyên để thấy sự dịch chuyển của vật thể
+            const scale = 200; 
+            const offsetX = canvas.width / 2;
+            const offsetY = canvas.height / 2;
+            
+            drawGridAndAxes(offsetX, offsetY);
+            
+            let x = Math.random(); 
+            let y = Math.random(); 
+            const iterations = 100000;
+            
+            const probF1 = k; 
+
+            // Bỏ qua các điểm đầu
+            for (let i = 0; i < 20; i++) {
+                const rand = Math.random();
+                let nextX, nextY;
+                if (rand < probF1) { 
+                    // CÔNG THỨC MỚI CHO F1
+                    nextX = y + p; 
+                    nextY = k * x + q;
+                } else {
+                    // CÔNG THỨC MỚI CHO F2
+                    nextX = y + p; 
+                    nextY = (1 - k) * x + q + k;
+                }
+                x = nextX; y = nextY;
+            }
+
+            // Vẽ các điểm
+            for (let i = 0; i < iterations; i++) {
+                const rand = Math.random();
+                let nextX, nextY;
+                if (rand < probF1) {
+                    // CÔNG THỨC MỚI CHO F1
+                    nextX = y + p; 
+                    nextY = k * x + q;
+                    ctx.fillStyle = '#00FF00'; // Xanh lá
+                } else {
+                    // CÔNG THỨC MỚI CHO F2
+                    nextX = y + p; 
+                    nextY = (1 - k) * x + q + k;
+                    ctx.fillStyle = '#FF0000'; // Đỏ
+                }
+                x = nextX; y = nextY;
+                const canvasX = x * scale + offsetX; 
+                const canvasY = -y * scale + offsetY; // Lật trục y
+                ctx.fillRect(canvasX, canvasY, 1, 1);
+            }
+        }
+        
+        // --- CÁC HÀM LẮNG NGHE SỰ KIỆN ---
+
+        // Cho tham số k
+        kSlider.addEventListener('input', (event) => {
+            k = parseFloat(event.target.value);
+            kText.value = k;
+            drawAttractor();
+        });
+        kText.addEventListener('input', (event) => {
+            let value = parseFloat(event.target.value);
+            if (!isNaN(value) && value >= 0 && value <= 1) {
+                k = value;
+                kSlider.value = k;
+                drawAttractor();
+            }
+        });
+
+        // Cho tham số p
+        pSlider.addEventListener('input', (event) => {
+            p = parseFloat(event.target.value);
+            pText.value = p.toFixed(2);
+            drawAttractor();
+        });
+        pText.addEventListener('input', (event) => {
+            let value = parseFloat(event.target.value);
+            if (!isNaN(value)) {
+                p = value;
+                pSlider.value = p;
+                drawAttractor();
+            }
+        });
+
+        // Cho tham số q
+        qSlider.addEventListener('input', (event) => {
+            q = parseFloat(event.target.value);
+            qText.value = q.toFixed(2);
+            drawAttractor();
+        });
+        qText.addEventListener('input', (event) => {
+            let value = parseFloat(event.target.value);
+            if (!isNaN(value)) {
+                q = value;
+                qSlider.value = q;
+                drawAttractor();
+            }
+        });
+
+        // Vẽ lần đầu khi tải trang
+        drawAttractor();
+    </script>
+</body>
+</html>
