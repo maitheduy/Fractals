@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sân chơi Fractal 3D (IFS Phi tuyến)</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #info-panel {
+            flex: 0 0 50%;
+            padding: 25px;
+            background-color: #2c2c2c;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        h1 {
+            color: #4fc3f7;
+            margin-top: 0;
+            font-size: 1.8em;
+            text-align: center;
+        }
+        p {
+            line-height: 1.6;
+            font-size: 1.1em;
+        }
+        .control-group {
+            margin: 20px 0;
+        }
+        label {
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        select, input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            font-size: 1em;
+            background-color: #555;
+            color: #fff;
+            border: 1px solid #777;
+            border-radius: 4px;
+        }
+        input[type="range"] {
+             cursor: pointer;
+        }
+        #refresh-button-container {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        #refresh-button {
+            padding: 8px 12px;
+            font-size: 1.2em;
+            margin-left: 10px;
+            cursor: pointer;
+            background-color: #4fc3f7;
+            border: none;
+            border-radius: 4px;
+            color: #1a1a1a;
+        }
+        #current-function-display {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: #3a3a3a;
+            border-radius: 4px;
+            text-align: center;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.1em;
+            color: #fdd835;
+        }
+
+        #equations {
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 1.1em; 
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .equation-title {
+            margin-bottom: 0.5em;
+            margin-top: 2.5em;
+            font-weight: bold;
+        }
+        .equation-title:first-child {
+            margin-top: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- NỬA BÊN TRÁI: THÔNG TIN VÀ ĐIỀU KHIỂN -->
+        <div id="info-panel">
+            <h1>Sân chơi Fractal 3D</h1>
+            <p>
+                Áp dụng công thức tổng quát để tạo ra các mặt cong khác nhau. Chọn một mặt cong từ menu bên dưới hoặc tạo một mặt ngẫu nhiên.
+            </p>
+
+            <div class="control-group">
+                <label for="function-selector">Chọn Mặt cong Attractor:</label>
+                <select id="function-selector">
+                    <option value="saddle" selected>Mặt Yên Ngựa</option>
+                    <option value="paraboloid">Paraboloid Eliptic</option>
+                    <option value="cylinder">Mặt Trụ Parabol</option>
+                    <option value="wave">Mặt Lượn sóng</option>
+                    <option value="random">Ngẫu nhiên</option>
+                </select>
+                <div id="refresh-button-container" style="display: none;">
+                    <div id="current-function-display"></div>
+                    <button id="refresh-button">🔄</button>
+                </div>
+            </div>
+            
+            <div class="control-group" id="k-slider-container" style="display: none;">
+                 <label for="k-slider">Tham số k = <span id="k-value">1.0</span></label>
+                <input type="range" id="k-slider" min="-4" max="4" value="1" step="0.1">
+            </div>
+
+            <div id="equations">
+                 <!-- MathJax sẽ render ở đây -->
+            </div>
+        </div>
+
+        <!-- NỬA BÊN PHẢI: KHUNG VẼ 3D -->
+        <div id="canvas-container"></div>
+    </div>
+
+    <!-- Tải MathJax -->
+    <script>
+        MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <!-- Tải Three.js và các điều khiển -->
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = { f1: null, f2: null };
+        const NUM_POINTS = 100000;
+
+        const functionSelector = document.getElementById('function-selector');
+        const kSliderContainer = document.getElementById('k-slider-container');
+        const kSlider = document.getElementById('k-slider');
+        const kValueSpan = document.getElementById('k-value');
+        const equationsDiv = document.getElementById('equations');
+        const canvasContainer = document.getElementById('canvas-container');
+        const refreshButtonContainer = document.getElementById('refresh-button-container');
+        const refreshButton = document.getElementById('refresh-button');
+        const currentFuncDisplay = document.getElementById('current-function-display');
+
+        const surfaceLibrary = {
+            saddle: { G1_latex: `(0.5y - 0.5)^2 - x^2`, G2_latex: `(0.5y + 0.5)^2 - x^2`, G1_func: (x, y) => (0.5 * y - 0.5)**2 - x**2, G2_func: (x, y) => (0.5 * y + 0.5)**2 - x**2 },
+            paraboloid: { G1_latex: `(0.5y - 0.5)^2 + x^2`, G2_latex: `(0.5y + 0.5)^2 + x^2`, G1_func: (x, y) => (0.5 * y - 0.5)**2 + x**2, G2_func: (x, y) => (0.5 * y + 0.5)**2 + x**2 },
+            cylinder: { G1_latex: (k=1) => `${k.toFixed(2)}x(1-x)`, G2_latex: (k=1) => `${k.toFixed(2)}x(1-x)`, G1_func: (x, y, k=1) => k * x * (1 - x), G2_func: (x, y, k=1) => k * x * (1 - x), hasK: true },
+            wave: { G1_latex: `0.3(\\sin(\\pi x) + \\cos(\\pi(0.5y - 0.5)))`, G2_latex: `0.3(\\sin(\\pi x) + \\cos(\\pi(0.5y + 0.5)))`, G1_func: (x, y) => 0.3 * (Math.sin(Math.PI * x) + Math.cos(Math.PI * (0.5*y - 0.5))), G2_func: (x, y) => 0.3 * (Math.sin(Math.PI * x) + Math.cos(Math.PI * (0.5*y + 0.5))) }
+        };
+
+        let currentRandomFunc = null;
+
+        /**
+         * Tạo chuỗi LaTeX cho hàm F(x, y) từ các hệ số.
+         * @param {number[]} coeffs - Mảng 6 hệ số cho [x, y, x^2, y^2, xy, hằng số].
+         * @returns {string} - Chuỗi LaTeX đã định dạng.
+         */
+        function generateLatexForRandomFunc(coeffs) {
+            const terms = [];
+            const termLabels = ['x', 'y', 'x^2', 'y^2', 'xy', ''];
+            
+            const formatTerm = (val, label, isFirst) => {
+                if (Math.abs(val) < 0.01) return ''; 
+
+                const sign = val < 0 ? '-' : (isFirst ? '' : '+');
+                const num = Math.abs(val).toFixed(2);
+                
+                const coeff = (num === '1.00' && label) ? '' : num;
+                return ` ${sign} ${coeff}${label}`;
+            };
+
+            const order = [2, 3, 4, 0, 1, 5]; // Sắp xếp: x^2, y^2, xy, x, y, const
+            let firstTerm = true;
+
+            for (const i of order) {
+                const termStr = formatTerm(coeffs[i], termLabels[i], firstTerm);
+                if (termStr) {
+                    terms.push(termStr);
+                    firstTerm = false;
+                }
+            }
+
+            if (terms.length === 0) return '0';
+            return terms.join('').trim();
+        }
+
+        /**
+         * Tạo ra một hàm F(x,y) ngẫu nhiên và biểu diễn LaTeX của nó.
+         * @returns {{func: Function, latex: string}}
+         */
+        function createRandomFunction() {
+            // [c0*x, c1*y, c2*x^2, c3*y^2, c4*xy, c5]
+            const c = Array.from({length: 6}, () => (Math.random() - 0.5) * 2.5);
+            const func = (x, y) => c[0]*x + c[1]*y + c[2]*x*x + c[3]*y*y + c[4]*x*y + c[5];
+            const latex = generateLatexForRandomFunc(c);
+            return { func, latex };
+        }
+
+        /**
+         * Cập nhật và render các phương trình bằng MathJax.
+         * @param {string} G1_latex - Chuỗi LaTeX cho thành phần z của v1.
+         * @param {string} G2_latex - Chuỗi LaTeX cho thành phần z của v2.
+         * @param {string|null} randomFuncLatex - (Tùy chọn) Chuỗi LaTeX định nghĩa hàm F(x,y) ngẫu nhiên.
+         */
+        function updateMathJax(G1_latex, G2_latex, randomFuncLatex = null) {
+            let randomFuncDef = '';
+            if (randomFuncLatex) {
+                randomFuncDef = `<p class="equation-title" style="color:#fdd835;">Hàm gốc ngẫu nhiên F(x,y):</p>$$ F(x,y) = ${randomFuncLatex} $$`;
+            }
+
+            const matrixA = `\\begin{pmatrix} 0 & 0.5 & 0 \\\\ 1 & 0 & 0 \\\\ 0 & 0 & 0 \\end{pmatrix}`;
+            const vector_v1 = `\\begin{pmatrix} -0.5 \\\\ 0 \\\\ ${G1_latex} \\end{pmatrix}`;
+            const vector_v2 = `\\begin{pmatrix} 0.5 \\\\ 0 \\\\ ${G2_latex} \\end{pmatrix}`;
+            
+            equationsDiv.innerHTML =
+                randomFuncDef +
+                `<p class="equation-title" style="color:#76ff03;">Hàm co $f_1$:</p>$$ \\mathbf{f}_1(\\mathbf{p}) = ${matrixA} \\mathbf{p} + ${vector_v1} $$` +
+                `<p class="equation-title" style="color:#ff1744;">Hàm co $f_2$:</p>$$ \\mathbf{f}_2(\\mathbf{p}) = ${matrixA} \\mathbf{p} + ${vector_v2} $$`;
+            
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typesetPromise([equationsDiv]).catch((err) => console.log('MathJax error:', err));
+            }
+        }
+        
+        function generateFractal(G1_func, G2_func, k=1) {
+            Object.values(pointsObjects).forEach(obj => { if (obj) { obj.geometry.dispose(); obj.material.dispose(); scene.remove(obj); } });
+            pointsObjects = { f1: null, f2: null };
+            const positions_f1 = [], positions_f2 = [];
+            let p = { x: 0.1, y: 0.1, z: 0.0 };
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nx, ny, nz;
+                if (Math.random() < 0.5) { 
+                    nx = 0.5 * p.y - 0.5; ny = p.x; nz = G1_func(p.x, p.y, k);
+                    p = { x: nx, y: ny, z: nz }; if (i > 20) positions_f1.push(p.x, p.y, p.z);
+                } else { 
+                    nx = 0.5 * p.y + 0.5; ny = p.x; nz = G2_func(p.x, p.y, k);
+                    p = { x: nx, y: ny, z: nz }; if (i > 20) positions_f2.push(p.x, p.y, p.z);
+                }
+            }
+            if (positions_f1.length > 0) {
+                const geom1 = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions_f1, 3));
+                pointsObjects.f1 = new THREE.Points(geom1, new THREE.PointsMaterial({ color: 0x76ff03, size: 0.015 }));
+                scene.add(pointsObjects.f1);
+            }
+            if (positions_f2.length > 0) {
+                const geom2 = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions_f2, 3));
+                pointsObjects.f2 = new THREE.Points(geom2, new THREE.PointsMaterial({ color: 0xff1744, size: 0.015 }));
+                scene.add(pointsObjects.f2);
+            }
+        }
+        
+        function regenerate(isRefresh=false) {
+            const selection = functionSelector.value;
+            const k = parseFloat(kSlider.value);
+            
+            let G1_latex, G2_latex, G1_func, G2_func;
+            let randomFuncLatex = null;
+
+            kSliderContainer.style.display = 'none';
+            refreshButtonContainer.style.display = 'none';
+
+            if (selection === 'random') {
+                if (isRefresh || !currentRandomFunc) {
+                    currentRandomFunc = createRandomFunction();
+                }
+                G1_func = (x, y) => currentRandomFunc.func(0.5 * y - 0.5, x);
+                G2_func = (x, y) => currentRandomFunc.func(0.5 * y + 0.5, x);
+                G1_latex = "F(0.5y - 0.5, x)";
+                G2_latex = "F(0.5y + 0.5, x)";
+                randomFuncLatex = currentRandomFunc.latex; // Lấy chuỗi LaTeX của hàm F
+                
+                refreshButtonContainer.style.display = 'flex';
+                currentFuncDisplay.textContent = 'Hàm ngẫu nhiên';
+            } else {
+                currentRandomFunc = null; // Xóa hàm ngẫu nhiên cũ
+                const surfaceData = surfaceLibrary[selection];
+                G1_func = surfaceData.G1_func;
+                G2_func = surfaceData.G2_func;
+                G1_latex = typeof surfaceData.G1_latex === 'function' ? surfaceData.G1_latex(k) : surfaceData.G1_latex;
+                G2_latex = typeof surfaceData.G2_latex === 'function' ? surfaceData.G2_latex(k) : surfaceData.G2_latex;
+                if (surfaceData.hasK) {
+                    kSliderContainer.style.display = 'block';
+                }
+            }
+            
+            updateMathJax(G1_latex, G2_latex, randomFuncLatex);
+            generateFractal(G1_func, G2_func, k);
+        }
+
+        function createLabeledAxes(size) {
+            const group = new THREE.Group(); const axesHelper = new THREE.AxesHelper(size); group.add(axesHelper);
+            const materialX = new THREE.MeshBasicMaterial({ color: 0xff0000 }); const materialY = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); const materialZ = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            const coneRadius = size * 0.03; const coneHeight = size * 0.1; const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+            const arrowX = new THREE.Mesh(coneGeometry, materialX); arrowX.position.set(size, 0, 0); arrowX.rotation.z = -Math.PI / 2; group.add(arrowX);
+            const arrowY = new THREE.Mesh(coneGeometry, materialY); arrowY.position.set(0, size, 0); group.add(arrowY);
+            const arrowZ = new THREE.Mesh(coneGeometry, materialZ); arrowZ.position.set(0, 0, size); arrowZ.rotation.x = Math.PI / 2; group.add(arrowZ);
+            const createAxisLabel = (text, color, position) => { const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const size = 64; canvas.width = size; canvas.height = size; context.font = `Bold ${size/2}px Arial`; context.fillStyle = color; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(text, size / 2, size / 2); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(0.3, 0.3, 1.0); sprite.position.copy(position); return sprite; };
+            group.add(createAxisLabel('X', '#ff7777', new THREE.Vector3(size + coneHeight, 0, 0)), createAxisLabel('Y', '#77ff77', new THREE.Vector3(0, size + coneHeight, 0)), createAxisLabel('Z', '#7777ff', new THREE.Vector3(0, 0, size + coneHeight)));
+            return group;
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(1.8, 1.8, 1.8);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0, 0);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(1, 1, 1); scene.add(directionalLight);
+            scene.add(createLabeledAxes(1.5));
+            
+            functionSelector.addEventListener('change', () => regenerate(false));
+            refreshButton.addEventListener('click', () => regenerate(true));
+            kSlider.addEventListener('input', (e) => {
+                kValueSpan.textContent = parseFloat(e.target.value).toFixed(1);
+                regenerate(false);
+            });
+            window.addEventListener('resize', () => { if (canvasContainer) { camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight); }});
+            
+            regenerate(false);
+            (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+        }
+
+        init();
+    </script>
+</body>
+</html>
