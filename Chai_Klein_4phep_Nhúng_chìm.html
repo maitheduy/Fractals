@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bốn Phép Nhúng chìm của Chai Klein Fractal</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 50%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        
+        #canvas-grid-container { flex-grow: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; background-color: #444; }
+        .canvas-cell { position: relative; background-color: #1a1a1a; border: 2px solid #444; display: flex; flex-direction: column; }
+        .canvas-cell h2 { position: absolute; top: 10px; left: 10px; z-index: 10; margin: 0; font-size: 1em; color: rgba(255,255,255,0.7); pointer-events: none; }
+        .canvas-wrapper { flex-grow: 1; min-height: 0; }
+
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        
+        .control-group { margin: 20px 0; }
+        label { font-weight: bold; font-size: 1.2em; }
+        .slider-container { display: flex; align-items: center; gap: 15px; margin-top: 10px; }
+        .slider-container input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-container input[type="number"] { width: 60px; padding: 5px; background-color: #555; color: #fff; border: 1px solid #777; border-radius: 4px; font-size: 1em; }
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.0em; font-weight: bold; }
+        canvas { display: block; width: 100% !important; height: 100% !important; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Bốn Phép Nhúng chìm của Chai Klein</h1>
+            <p>Tất cả 4 view đều sử dụng phép nhúng chìm 3D kinh điển. Các view phụ được tạo ra bằng cách <b>hoán vị các trục tọa độ</b> của kết quả, cho thấy các "phối cảnh" khác nhau của cùng một cấu trúc hình học.</p>
+            <div class="control-group">
+                <label for="k-slider">Tham số k = <span id="k-value">0.50</span></label>
+                <div class="slider-container">
+                    <input type="range" id="k-slider" min="0" max="1" value="0.5" step="0.01">
+                    <input type="number" id="k-text" min="0" max="1" value="0.5" step="0.01">
+                </div>
+            </div>
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-grid-container">
+            <div class="canvas-cell" id="cell-xyz"><h2>Oxyz (Nhúng chìm Kinh điển)</h2><div class="canvas-wrapper"></div></div>
+            <div class="canvas-cell" id="cell-xyw"><h2>Oxyw (Hoán vị z->w)</h2><div class="canvas-wrapper"></div></div>
+            <div class="canvas-cell" id="cell-xzw"><h2>Oxzw (Hoán vị y-z)</h2><div class="canvas-wrapper"></div></div>
+            <div class="canvas-cell" id="cell-yzw"><h2>Oyzw (Hoán vị x-y-z)</h2><div class="canvas-wrapper"></div></div>
+        </div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        const views = {
+            xyz: { container: document.querySelector('#cell-xyz .canvas-wrapper'), labels: ['X', 'Y', 'Z'] },
+            xyw: { container: document.querySelector('#cell-xyw .canvas-wrapper'), labels: ['X', 'Y', 'W'] },
+            xzw: { container: document.querySelector('#cell-xzw .canvas-wrapper'), labels: ['X', 'Z', 'W'] },
+            yzw: { container: document.querySelector('#cell-yzw .canvas-wrapper'), labels: ['Y', 'Z', 'W'] }
+        };
+
+        const NUM_POINTS = 100000;
+
+        const kSlider = document.getElementById('k-slider');
+        const kText = document.getElementById('k-text');
+        const kValueSpan = document.getElementById('k-value');
+        const equationsDiv = document.getElementById('equations');
+
+        function updateMathJax(k, p1) {
+            const h1 = `\\mathbf{h}_1(u,v) = \\begin{pmatrix} 0 & 1 \\\\ ${k.toFixed(2)} & 0 \\end{pmatrix} \\begin{pmatrix} u \\\\ v \\end{pmatrix}`;
+            const h2 = `\\mathbf{h}_2(u,v) = \\begin{pmatrix} 0 & 1 \\\\ 1-${k.toFixed(2)} & 0 \\end{pmatrix} \\begin{pmatrix} u \\\\ v \\end{pmatrix} + \\begin{pmatrix} 0 \\\\ ${k.toFixed(2)} \\end{pmatrix}`;
+            const mapping3D = `\\mathbf{M}_{3D}(u,v) \\to (x,y,z)`;
+
+            equationsDiv.innerHTML = `<p class="equation-title">Hệ IFS Nguồn (2D):</p>$$ ${h1} , ${h2} $$<p class="equation-title">Hàm Ánh xạ Nhúng chìm 3D Kinh điển:</p>$$ ${mapping3D} $$<p style="font-size:0.9em; text-align:center;">Các view khác được tạo bằng cách hoán vị tọa độ $(x,y,z)$</p>`;
+            if (window.MathJax && window.MathJax.typeset) { MathJax.typesetPromise([equationsDiv]).catch((err) => console.log('MathJax error:', err)); }
+        }
+
+        function generateFractal(k, p1) {
+            Object.values(views).forEach(view => {
+                if (view.pointsObjects) {
+                    Object.values(view.pointsObjects).forEach(obj => {
+                        if (obj) { obj.geometry.dispose(); obj.material.dispose(); view.scene.remove(obj); }
+                    });
+                }
+                view.pointsObjects = { f1: null, f2: null };
+            });
+
+            const positions = {
+                xyz: { f1: [], f2: [] }, xyw: { f1: [], f2: [] },
+                xzw: { f1: [], f2: [] }, yzw: { f1: [], f2: [] }
+            };
+
+            let p_uv = { u: Math.random(), v: Math.random() };
+            
+            // --- HÀM NHÚNG CHÌM KINH ĐIỂN - ĐÃ SỬA LỖI ---
+            const mapToClassic3D = (u_norm, v_norm) => {
+                const u = u_norm * 2 * Math.PI;
+                const v = v_norm * 2 * Math.PI;
+                const scale = 0.25;
+
+                const r = 4 * (1 - Math.cos(u) / 2);
+                let x,y,z;
+
+                if (u <= Math.PI) {
+                    x = 6 * Math.cos(u) * (1 + Math.sin(u)) + r * Math.cos(u) * Math.cos(v);
+                    y = 16 * Math.sin(u) + r * Math.sin(u) * Math.cos(v);
+                } else {
+                    x = 6 * Math.cos(u) * (1 + Math.sin(u)) - r * Math.cos(v);
+                    y = 16 * Math.sin(u);
+                }
+                z = r * Math.sin(v);
+
+                return { x: x * scale, y: y * scale, z: z * scale };
+            };
+            
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nu, nv, is_f1;
+                if (Math.random() < p1) { nu = p_uv.v; nv = k * p_uv.u; is_f1 = true; } 
+                else { nu = p_uv.v; nv = (1 - k) * p_uv.u + k; is_f1 = false; }
+                p_uv = { u: nu, v: nv };
+
+                if (i > 20) {
+                    const p3d = mapToClassic3D(p_uv.u, p_uv.v);
+                    const target = is_f1 ? 'f1' : 'f2';
+
+                    // Tạo 4 điểm 3D bằng cách hoán vị
+                    positions.xyz[target].push(p3d.x, p3d.y, p3d.z); // Chuẩn
+                    positions.xyw[target].push(p3d.x, p3d.y, p3d.z); // w = z
+                    positions.xzw[target].push(p3d.x, p3d.z, p3d.y); // (x, z, y)
+                    positions.yzw[target].push(p3d.y, p3d.z, p3d.x); // (y, z, x)
+                }
+            }
+            
+            const createPoints = (pos, color) => {
+                if (pos.length === 0) return null;
+                const geom = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                return new THREE.Points(geom, new THREE.PointsMaterial({ color: color, size: 0.02 }));
+            };
+            
+            for (const key in views) {
+                const view = views[key];
+                view.pointsObjects.f1 = createPoints(positions[key].f1, 0x76ff03);
+                view.pointsObjects.f2 = createPoints(positions[key].f2, 0xff1744);
+                if (view.pointsObjects.f1) view.scene.add(view.pointsObjects.f1);
+                if (view.pointsObjects.f2) view.scene.add(view.pointsObjects.f2);
+            }
+        }
+        
+        function regenerate() {
+            const k = parseFloat(kSlider.value);
+            kValueSpan.textContent = k.toFixed(2);
+            if (document.activeElement !== kText) { kText.value = k.toFixed(2); }
+            const p1 = k;
+            updateMathJax(k, p1);
+            generateFractal(k, p1);
+        }
+
+        function createLabeledAxes(size, labelX, labelY, labelZ) {
+            const group = new THREE.Group(); const axesHelper = new THREE.AxesHelper(size); group.add(axesHelper);
+            const materialX = new THREE.MeshBasicMaterial({ color: 0xff0000 }); const materialY = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); const materialZ = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            const coneRadius = size * 0.03; const coneHeight = size * 0.1; const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 16);
+            const arrowX = new THREE.Mesh(coneGeometry, materialX); arrowX.position.set(size, 0, 0); arrowX.rotation.z = -Math.PI / 2; group.add(arrowX);
+            const arrowY = new THREE.Mesh(coneGeometry, materialY); arrowY.position.set(0, size, 0); group.add(arrowY);
+            const arrowZ = new THREE.Mesh(coneGeometry, materialZ); arrowZ.position.set(0, 0, size); arrowZ.rotation.x = Math.PI / 2; group.add(arrowZ);
+            const createAxisLabel = (text, color, position) => { const canvas = document.createElement('canvas'); const context = canvas.getContext('2d'); const size = 64; canvas.width = size; canvas.height = size; context.font = `Bold ${size/2}px Arial`; context.fillStyle = color; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(text, size / 2, size / 2); const texture = new THREE.CanvasTexture(canvas); const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true }); const sprite = new THREE.Sprite(spriteMaterial); sprite.scale.set(0.3, 0.3, 1.0); sprite.position.copy(position); return sprite; };
+            group.add(createAxisLabel(labelX, '#ff7777', new THREE.Vector3(size + coneHeight, 0, 0)));
+            group.add(createAxisLabel(labelY, '#77ff77', new THREE.Vector3(0, size + coneHeight, 0)));
+            group.add(createAxisLabel(labelZ, '#7777ff', new THREE.Vector3(0, 0, size + coneHeight)));
+            return group;
+        }
+        
+        function init() {
+            for (const key in views) {
+                const view = views[key];
+                view.scene = new THREE.Scene();
+                view.scene.background = new THREE.Color(0x1a1a1a);
+                view.camera = new THREE.PerspectiveCamera(75, view.container.clientWidth / view.container.clientHeight, 0.1, 1000);
+                view.camera.position.set(2.5, 2.5, 2.5);
+                view.renderer = new THREE.WebGLRenderer({ antialias: true });
+                view.renderer.setSize(view.container.clientWidth, view.container.clientHeight);
+                view.container.appendChild(view.renderer.domElement);
+                view.controls = new OrbitControls(view.camera, view.renderer.domElement);
+                view.controls.enableDamping = true;
+                view.controls.target.set(0, 0, 0);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); view.scene.add(ambientLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(1, 1, 1); view.scene.add(directionalLight);
+                view.scene.add(createLabeledAxes(3.0, ...view.labels));
+            }
+            kSlider.addEventListener('input', (e) => { kText.value = parseFloat(e.target.value).toFixed(2); regenerate(); });
+            kText.addEventListener('input', (e) => { let val = parseFloat(e.target.value); if (isNaN(val)) return; val = Math.max(0, Math.min(1, val)); kSlider.value = val; regenerate(); });
+            window.addEventListener('resize', () => {
+                for (const key in views) {
+                    const view = views[key];
+                    view.camera.aspect = view.container.clientWidth / view.container.clientHeight;
+                    view.camera.updateProjectionMatrix();
+                    view.renderer.setSize(view.container.clientWidth, view.container.clientHeight);
+                }
+            });
+            regenerate();
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            for (const key in views) {
+                const view = views[key];
+                view.controls.update();
+                view.renderer.render(view.scene, view.camera);
+            }
+        }
+        init();
+    </script>
+</body>
+</html>
