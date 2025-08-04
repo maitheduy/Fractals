@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thảm Sierpinski (8 Màu) "Dát Vàng" trên Dải băng Thắt nút</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 45%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        
+        .control-group { margin: 20px 0; }
+        label { font-weight: bold; font-size: 1.2em; }
+        .slider-container { display: flex; align-items: center; gap: 15px; margin-top: 10px; }
+        .slider-container input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-container input[type="number"] { width: 70px; padding: 5px; background-color: #555; color: #fff; border: 1px solid #777; border-radius: 4px; font-size: 1em; }
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.0em; font-weight: bold; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Thảm Sierpinski (8 Màu) "Dát Vàng" trên Dải băng Thắt nút</h1>
+            <p>
+                Mô hình này tạo ra fractal <strong>Thảm Sierpinski</strong>. Mỗi màu tương ứng với một trong 8 hàm co của Hệ thống Hàm lặp (IFS). Attractor 2D này sau đó được "dát" lên bề mặt của Dải băng.
+            </p>
+            
+            <div class="control-group">
+                <label for="p-slider">Độ rộng Dải băng (p) = <span id="p-value">0.60</span></label>
+                <div class="slider-container">
+                    <input type="range" id="p-slider" min="0.1" max="1.5" value="0.6" step="0.01">
+                    <input type="number" id="p-text" min="0.1" max="1.5" value="0.6" step="0.01">
+                </div>
+            </div>
+
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ParametricGeometry } from 'three/addons/geometries/ParametricGeometry.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = []; // Mảng chứa 8 đối tượng điểm
+        let ribbonMesh = null; 
+
+        const NUM_POINTS = 200000;
+        const R = 0.8; 
+        let ribbonWidth = 0.6; 
+
+        // Định nghĩa 8 màu sắc
+        const FRACTAL_COLORS = [
+            0xff0000, // Đỏ
+            0x00ff00, // Xanh lá
+            0x0000ff, // Xanh dương
+            0xffff00, // Vàng
+            0xff00ff, // Tím
+            0x00ffff, // Xyan
+            0xffa500, // Cam
+            0xffffff  // Trắng
+        ];
+
+        const pSlider = document.getElementById('p-slider');
+        const pText = document.getElementById('p-text');
+        const pValueSpan = document.getElementById('p-value');
+        const equationsDiv = document.getElementById('equations');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        function updateMathJax() {
+            const sierpinski_latex = `\\mathbf{f}_{i,j}(x,y) = \\frac{1}{3} \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\frac{1}{3} \\begin{pmatrix} i \\\\ j \\end{pmatrix}`;
+            const conditions_latex = `i,j \\in \\{0,1,2\\}, \\quad (i,j) \\neq (1,1)`;
+            equationsDiv.innerHTML = `
+                <p class="equation-title">IFS tạo Thảm Sierpinski (8 hàm co):</p>
+                <p>$$ ${sierpinski_latex} $$</p>
+                <p>Với điều kiện: $$ ${conditions_latex} $$</p>
+                <hr>
+                <p class="equation-title">Ánh xạ lên bề mặt (p=${ribbonWidth.toFixed(2)}):</p>
+                <p>$$ \\vec{S}(t,v) = \\vec{c}(t) + v \\cdot \\vec{N}(t) $$</p>`;
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                MathJax.typesetPromise([equationsDiv]).catch((err) => console.log('MathJax error:', err));
+            }
+        }
+
+        const epsilon = 0.0001;
+        const c = (t_val) => new THREE.Vector3( R * (Math.sin(t_val) + 2 * Math.sin(2 * t_val)), R * (Math.cos(t_val) - 2 * Math.cos(2 * t_val)), R * (-Math.sin(3 * t_val)) );
+        const c_prime = (t_val) => new THREE.Vector3( R * (Math.cos(t_val) + 4 * Math.cos(2 * t_val)), R * (-Math.sin(t_val) + 4 * Math.sin(2 * t_val)), R * (-3 * Math.cos(3 * t_val)) );
+        const getFrenetFrame = (t) => {
+            const T = c_prime(t).normalize();
+            const T_at_t_plus_epsilon = c_prime(t + epsilon).normalize();
+            const T_prime = new THREE.Vector3().subVectors(T_at_t_plus_epsilon, T).divideScalar(epsilon);
+            const N = T_prime.normalize();
+            return { N };
+        };
+        const mapToRibbon = (x, y) => c(x * 2 * Math.PI).addScaledVector(getFrenetFrame(x * 2 * Math.PI).N, (y - 0.5) * ribbonWidth);
+
+        // **HÀM TẠO FRACTAL ĐÃ ĐƯỢC CẬP NHẬT ĐỂ SỬ DỤNG 8 MÀU**
+        function generateSierpinskiPoints() {
+            // Dọn dẹp các đối tượng điểm cũ
+            pointsObjects.forEach(obj => {
+                scene.remove(obj);
+                obj.geometry.dispose();
+                obj.material.dispose();
+            });
+            pointsObjects = [];
+
+            // Mảng chứa 8 mảng điểm, mỗi mảng cho một hàm co
+            const pointGroups = Array(8).fill(null).map(() => []);
+            let p_xy = { x: Math.random(), y: Math.random() };
+
+            const transforms = [
+                (p) => ({ x: p.x / 3,       y: p.y / 3 }),
+                (p) => ({ x: p.x / 3 + 1/3, y: p.y / 3 }),
+                (p) => ({ x: p.x / 3 + 2/3, y: p.y / 3 }),
+                (p) => ({ x: p.x / 3,       y: p.y / 3 + 1/3 }),
+                (p) => ({ x: p.x / 3 + 2/3, y: p.y / 3 + 1/3 }),
+                (p) => ({ x: p.x / 3,       y: p.y / 3 + 2/3 }),
+                (p) => ({ x: p.x / 3 + 1/3, y: p.y / 3 + 2/3 }),
+                (p) => ({ x: p.x / 3 + 2/3, y: p.y / 3 + 2/3 }),
+            ];
+
+            for (let i = 0; i < NUM_POINTS; i++) {
+                const choice = Math.floor(Math.random() * 8);
+                p_xy = transforms[choice](p_xy);
+                
+                if (i > 20) {
+                    pointGroups[choice].push(p_xy);
+                }
+            }
+
+            // Tạo 8 đối tượng THREE.Points từ 8 nhóm điểm
+            pointGroups.forEach((group, index) => {
+                if (group.length === 0) return;
+
+                const positions = new Float32Array(group.length * 3);
+                group.forEach((p, idx) => {
+                    const p3d = mapToRibbon(p.x, p.y);
+                    positions[idx * 3]     = p3d.x;
+                    positions[idx * 3 + 1] = p3d.y;
+                    positions[idx * 3 + 2] = p3d.z;
+                });
+                
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({
+                    color: FRACTAL_COLORS[index], // Lấy màu tương ứng
+                    size: 0.015,
+                    sizeAttenuation: true
+                });
+                
+                const points = new THREE.Points(geometry, material);
+                pointsObjects.push(points); // Lưu lại để dọn dẹp sau
+                scene.add(points);
+            });
+        }
+        
+        function createOrUpdateWireframe() {
+            if (ribbonMesh) {
+                scene.remove(ribbonMesh);
+                ribbonMesh.geometry.dispose();
+                ribbonMesh.material.dispose();
+            }
+            const ribbonFunction = (t, v, target) => mapToRibbon(t, v);
+            const ribbonGeom = new ParametricGeometry(ribbonFunction, 256, 2);
+            const ribbonMat = new THREE.MeshStandardMaterial({
+                color: 0x444444, wireframe: true, transparent: true, opacity: 0.15, side: THREE.DoubleSide
+            });
+            ribbonMesh = new THREE.Mesh(ribbonGeom, ribbonMat);
+            scene.add(ribbonMesh);
+        }
+
+        function regenerate() {
+            ribbonWidth = parseFloat(pSlider.value);
+            pValueSpan.textContent = ribbonWidth.toFixed(2);
+            if (document.activeElement !== pText) { pText.value = ribbonWidth.toFixed(2); }
+
+            updateMathJax();
+            createOrUpdateWireframe();
+            generateSierpinskiPoints();
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 100);
+            camera.position.set(0, 0, 5);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            
+            pSlider.addEventListener('input', () => regenerate());
+            pText.addEventListener('change', (e) => {
+                let val = parseFloat(e.target.value);
+                if (isNaN(val)) return;
+                val = Math.max(0.1, Math.min(1.5, val));
+                e.target.value = val.toFixed(2);
+                pSlider.value = val;
+                regenerate();
+            });
+            
+            window.addEventListener('resize', () => {
+                camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            });
+            
+            regenerate();
+            
+            // Cập nhật logic lấy bounding box
+            const box = new THREE.Box3();
+            if (ribbonMesh) {
+                box.setFromObject(ribbonMesh);
+            }
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            camera.position.z = maxDim > 0 ? (Math.abs(maxDim / (2 * Math.tan(fov / 2))) * 1.5) : 5;
+            controls.target.copy(center);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
