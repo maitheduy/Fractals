@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fractal "Dán" Tôpô trên Chai Klein</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 45%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p, .explanation { line-height: 1.6; font-size: 1.1em; }
+        
+        .control-group { margin: 20px 0; }
+        label { font-weight: bold; font-size: 1.2em; display: block; margin-bottom: 10px; }
+        .slider-container { display: flex; align-items: center; gap: 15px; }
+        .slider-container input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-container input[type="number"] { width: 70px; padding: 5px; background-color: #555; color: #fff; border: 1px solid #777; border-radius: 4px; font-size: 1em; }
+        
+        .radio-group { display: flex; flex-direction: column; gap: 8px; font-size: 1.1em; }
+        .radio-group div { display: flex; align-items: center; }
+        .radio-group input[type="radio"] { margin-right: 10px; cursor: pointer; }
+        .radio-group label { font-weight: normal; margin-bottom: 0; }
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 0.9em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.0em; font-weight: bold; color: #4fc3f7;}
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Fractal "Dán" Tôpô trên Chai Klein</h1>
+            <p class="explanation">
+                Mô hình này không "bọc" một fractal có sẵn. Thay vào đó, nó tạo ra một fractal <strong>trực tiếp trên không gian tôpô của Chai Klein</strong>.
+            </p>
+            <p class="explanation">
+                 Mỗi khi một điểm bị hàm lặp đẩy ra ngoài biên của hình vuông cơ bản, nó sẽ được "dán" trở lại theo quy tắc: cạnh trên nối cạnh dưới, cạnh trái nối cạnh phải nhưng bị <strong>lật ngược</strong>. Cấu trúc fractal bạn thấy là hệ quả trực tiếp của không gian phi định hướng này.
+            </p>
+            
+            <div class="control-group">
+                <label for="k-slider">Tham số Fractal (k) = <span id="k-value">0.50</span></label>
+                <div class="slider-container">
+                    <input type="range" id="k-slider" min="0" max="1" value="0.5" step="0.01">
+                    <input type="number" id="k-text" min="0" max="1" value="0.5" step="0.01">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Chế độ Hiển thị</label>
+                <div class="radio-group">
+                    <div>
+                        <input type="radio" id="vis-both" name="visibility" value="both" checked>
+                        <label for="vis-both">Hiện cả hai mảnh</label>
+                    </div>
+                    <div>
+                        <input type="radio" id="vis-green" name="visibility" value="green">
+                        <label for="vis-green" style="color:#76ff03;">Chỉ hiện mảnh Xanh lá</label>
+                    </div>
+                     <div>
+                        <input type="radio" id="vis-red" name="visibility" value="red">
+                        <label for="vis-red" style="color:#ff1744;">Chỉ hiện mảnh Đỏ tươi</label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ParametricGeometry } from 'three/addons/geometries/ParametricGeometry.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = { f1: null, f2: null };
+        let kleinBottleMesh = null;
+
+        const NUM_POINTS = 150000;
+
+        const kSlider = document.getElementById('k-slider');
+        const kText = document.getElementById('k-text');
+        const kValueSpan = document.getElementById('k-value');
+        const visibilityControls = document.querySelectorAll('input[name="visibility"]');
+        const equationsDiv = document.getElementById('equations');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        function updateMathJax(k) {
+            equationsDiv.innerHTML = `<p class="equation-title">Hệ IFS (k=${k.toFixed(2)}):</p>
+                <p style="color:#76ff03;">$$ \\mathbf{f}_1(x,y) = \\begin{pmatrix} y \\\\ ${k.toFixed(2)}x \\end{pmatrix} $$</p> 
+                <p style="color:#ff1744;">$$ \\mathbf{f}_2(x,y) = \\begin{pmatrix} y \\\\ ${(1-k).toFixed(2)}x + ${k.toFixed(2)} \\end{pmatrix} $$</p>
+                <hr>
+                <p class="equation-title">Quy tắc "Dán" Tôpô (cho điểm $P=(x,y)$):</p>
+                <p>1. Xác định số lần vượt biên ngang: $n_x = \\lfloor x \\rfloor$</p>
+                <p>2. Chuẩn hóa $x$: $x_{new} = x - n_x$</p>
+                <p>3. Chuẩn hóa $y$: $y_{new} = y - \\lfloor y \\rfloor$</p>
+                <p>4. Lật ngược $y$ nếu cần: <strong>If $n_x$ is odd, $y_{final} = 1 - y_{new}$</strong></p>
+                <p>$$ P_{final} = (x_{new}, y_{final}) $$</p>
+                `;
+            if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetPromise([equationsDiv]); }
+        }
+        
+        function updateVisibility() {
+            const selectedValue = document.querySelector('input[name="visibility"]:checked').value;
+            if (pointsObjects.f1) pointsObjects.f1.visible = (selectedValue === 'green' || selectedValue === 'both');
+            if (pointsObjects.f2) pointsObjects.f2.visible = (selectedValue === 'red' || selectedValue === 'both');
+        }
+
+        // *** HÀM MỚI: ÁP DỤNG QUY TẮC DÁN CỦA CHAI KLEIN ***
+        function applyKleinTopology(p) {
+            const x = p.x;
+            const y = p.y;
+
+            // 1. Tính số lần vượt biên ngang
+            const x_crossings = Math.floor(x);
+
+            // 2. Chuẩn hóa x về [0, 1)
+            const new_x = x - x_crossings;
+
+            // 3. Chuẩn hóa y về [0, 1)
+            let new_y = y - Math.floor(y);
+
+            // 4. Lật ngược y nếu số lần vượt biên ngang là số lẻ
+            if (x_crossings % 2 !== 0) {
+                new_y = 1.0 - new_y;
+            }
+            
+            return { x: new_x, y: new_y };
+        }
+
+        // Phép nhúng 3D (để hiển thị) vẫn dùng Lawson-Hanson cho đẹp
+        const kleinBottleFunction = (u, v, target) => {
+            const cu = Math.cos(u); const su = Math.sin(u);
+            const cv = Math.cos(v); const sv = Math.sin(v);
+            const x = (-(2 / 15)) * cu * (3 * cv - 30 * su + 90 * Math.pow(cu, 4) * su - 60 * Math.pow(cu, 6) * su + 5 * cu * cv * su);
+            const y = (-(1 / 15)) * su * (3 * cv - 3 * Math.pow(cu, 2) * cv - 48 * Math.pow(cu, 4) * cv + 48 * Math.pow(cu, 6) * cv - 60 * su + 5 * cu * cv * su - 5 * Math.pow(cu, 3) * cv * su - 80 * Math.pow(cu, 5) * cv * su + 80 * Math.pow(cu, 7) * cv * su);
+            const z = (2 / 15) * (3 + 5 * cu * su) * sv;
+            target.set(x, y, z).multiplyScalar(2);
+        };
+        
+        function mapTo3DVisualization(x_fractal, y_fractal) {
+            const u = x_fractal * Math.PI; 
+            const v = y_fractal * 2 * Math.PI;
+            const point = new THREE.Vector3();
+            kleinBottleFunction(u, v, point);
+            return point;
+        }
+
+        function generateFractalPoints(k) {
+            if (pointsObjects.f1) scene.remove(pointsObjects.f1);
+            if (pointsObjects.f2) scene.remove(pointsObjects.f2);
+            
+            const attractorPoints2D_f1 = [];
+            const attractorPoints2D_f2 = [];
+            // Bắt đầu với một điểm đã được chuẩn hóa trên không gian Klein
+            let p_xy = applyKleinTopology({ x: Math.random(), y: Math.random() });
+            const p1 = k;
+
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nx, ny, targetArray;
+                if (Math.random() < p1) { 
+                    nx = p_xy.y; 
+                    ny = k * p_xy.x; 
+                    targetArray = attractorPoints2D_f1;
+                } else { 
+                    nx = p_xy.y; 
+                    ny = (1 - k) * p_xy.x + k; 
+                    targetArray = attractorPoints2D_f2; 
+                }
+
+                // *** ĐÂY LÀ SỰ THAY ĐỔI CỐT LÕI ***
+                // Áp dụng quy tắc dán NGAY LẬP TỨC sau mỗi bước lặp
+                p_xy = applyKleinTopology({ x: nx, y: ny });
+
+                if (i > 20) {
+                    targetArray.push(p_xy);
+                }
+            }
+
+            const createPoints = (points, color) => {
+                if (points.length === 0) return null;
+                const positions = new Float32Array(points.length * 3);
+                points.forEach((p, idx) => {
+                    // Ánh xạ điểm 2D (đã ở trên Klein) sang 3D để hiển thị
+                    const p3d = mapTo3DVisualization(p.x, p.y);
+                    positions[idx * 3] = p3d.x; positions[idx * 3 + 1] = p3d.y; positions[idx * 3 + 2] = p3d.z;
+                });
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({ color: color, size: 0.02, sizeAttenuation: true });
+                return new THREE.Points(geometry, material);
+            };
+            
+            pointsObjects.f1 = createPoints(attractorPoints2D_f1, 0x76ff03);
+            pointsObjects.f2 = createPoints(attractorPoints2D_f2, 0xff1744);
+            
+            if (pointsObjects.f1) scene.add(pointsObjects.f1);
+            if (pointsObjects.f2) scene.add(pointsObjects.f2);
+            updateVisibility();
+        }
+
+        function createOrUpdateKleinBottleWireframe() {
+            if (kleinBottleMesh) {
+                scene.remove(kleinBottleMesh);
+                kleinBottleMesh.geometry.dispose();
+                kleinBottleMesh.material.dispose();
+            }
+             
+            const parametricFunc = (u_param, v_param, target) => {
+                const u = u_param * Math.PI;
+                const v = v_param * 2 * Math.PI;
+                kleinBottleFunction(u, v, target);
+            };
+
+            const geom = new ParametricGeometry(parametricFunc, 100, 100);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: 0x555555, wireframe: true, transparent: true, opacity: 0.15, side: THREE.DoubleSide 
+            });
+            kleinBottleMesh = new THREE.Mesh(geom, mat);
+            scene.add(kleinBottleMesh);
+        }
+        
+        function regenerate() {
+            const k = parseFloat(kSlider.value);
+            kValueSpan.textContent = k.toFixed(2);
+            if (document.activeElement !== kText) { kText.value = k.toFixed(2); }
+
+            updateMathJax(k);
+            createOrUpdateKleinBottleWireframe();
+            generateFractalPoints(k);
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 100);
+            camera.position.set(0, 0, 8);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(10, 15, 10);
+            scene.add(directionalLight);
+
+            kSlider.addEventListener('input', () => regenerate());
+            kText.addEventListener('change', (e) => { let val = parseFloat(e.target.value); val = Math.max(0, Math.min(1, val)); e.target.value = val.toFixed(2); kSlider.value = val; regenerate(); });
+            
+            visibilityControls.forEach(radio => radio.addEventListener('change', updateVisibility));
+            window.addEventListener('resize', () => {
+                camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            });
+            
+            regenerate();
+            
+            const box = new THREE.Box3().setFromObject(kleinBottleMesh);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            camera.position.z = maxDim > 0 ? (Math.abs(maxDim / (2 * Math.tan(fov / 2))) * 1.5) : 8;
+            controls.target.copy(center);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
