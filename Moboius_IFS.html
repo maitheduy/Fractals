@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fractal "Dát Vàng" trên Dải Mobius</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 45%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        
+        .control-group { margin: 20px 0; }
+        label { font-weight: bold; font-size: 1.2em; display: block; margin-bottom: 10px; }
+        .slider-container { display: flex; align-items: center; gap: 15px; }
+        .slider-container input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-container input[type="number"] { width: 70px; padding: 5px; background-color: #555; color: #fff; border: 1px solid #777; border-radius: 4px; font-size: 1em; }
+        
+        .radio-group { display: flex; flex-direction: column; gap: 8px; font-size: 1.1em; }
+        .radio-group div { display: flex; align-items: center; }
+        .radio-group input[type="radio"] { margin-right: 10px; cursor: pointer; }
+        .radio-group label { font-weight: normal; margin-bottom: 0; }
+
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.0em; font-weight: bold; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1>Fractal "Dát Vàng" trên Dải Mobius</h1>
+            <p>
+                Mô hình này tạo một attractor 2D và "dát" nó lên bề mặt của một <strong>Dải Mobius</strong>. Bạn có thể điều chỉnh tham số fractal, độ rộng của dải, và chế độ hiển thị.
+            </p>
+            
+            <div class="control-group">
+                <label for="k-slider">Tham số Fractal (k) = <span id="k-value">0.50</span></label>
+                <div class="slider-container">
+                    <input type="range" id="k-slider" min="0" max="1" value="0.5" step="0.01">
+                    <input type="number" id="k-text" min="0" max="1" value="0.5" step="0.01">
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="p-slider">Độ rộng Dải Mobius (p) = <span id="p-value">1.00</span></label>
+                <div class="slider-container">
+                    <!-- THAY ĐỔI: max="10" -->
+                    <input type="range" id="p-slider" min="0.1" max="10" value="1.0" step="0.01">
+                    <!-- THAY ĐỔI: max="10" -->
+                    <input type="number" id="p-text" min="0.1" max="10" value="1.0" step="0.01">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Chế độ Hiển thị</label>
+                <div class="radio-group">
+                    <div>
+                        <input type="radio" id="vis-both" name="visibility" value="both" checked>
+                        <label for="vis-both">Hiện cả hai mảnh</label>
+                    </div>
+                    <div>
+                        <input type="radio" id="vis-green" name="visibility" value="green">
+                        <label for="vis-green" style="color:#76ff03;">Chỉ hiện mảnh Xanh lá</label>
+                    </div>
+                     <div>
+                        <input type="radio" id="vis-red" name="visibility" value="red">
+                        <label for="vis-red" style="color:#ff1744;">Chỉ hiện mảnh Đỏ tươi</label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ParametricGeometry } from 'three/addons/geometries/ParametricGeometry.js';
+
+        let scene, camera, renderer, controls;
+        let pointsObjects = { f1: null, f2: null };
+        let mobiusMesh = null;
+
+        const NUM_POINTS = 150000;
+        const R = 2.0;
+        let mobiusWidth = 1.0;
+
+        const kSlider = document.getElementById('k-slider');
+        const kText = document.getElementById('k-text');
+        const kValueSpan = document.getElementById('k-value');
+        const pSlider = document.getElementById('p-slider');
+        const pText = document.getElementById('p-text');
+        const pValueSpan = document.getElementById('p-value');
+        const visibilityControls = document.querySelectorAll('input[name="visibility"]');
+        const equationsDiv = document.getElementById('equations');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        function updateMathJax(k, p) {
+            const f1_latex = `\\mathbf{f}_1(x,y) = \\begin{pmatrix} y \\\\ ${k.toFixed(2)}x \\end{pmatrix}`;
+            const f2_latex = `\\mathbf{f}_2(x,y) = \\begin{pmatrix} y \\\\ ${(1-k).toFixed(2)}x + ${k.toFixed(2)} \\end{pmatrix}`;
+            const mobius_x = `x(u,v) = (R + v \\cos(u/2)) \\cos(u)`;
+            const mobius_y = `y(u,v) = (R + v \\cos(u/2)) \\sin(u)`;
+            const mobius_z = `z(u,v) = v \\sin(u/2)`;
+
+            equationsDiv.innerHTML = `<p class="equation-title">Hệ IFS (k=${k.toFixed(2)}):</p><p style="color:#76ff03;">$$ ${f1_latex} $$</p> <p style="color:#ff1744;">$$ ${f2_latex} $$</p><p class="equation-title">Ánh xạ lên Dải Mobius (p=${p.toFixed(2)}):</p><p>$$ ${mobius_x} $$$$ ${mobius_y} $$$$ ${mobius_z} $$</p>`;
+            if (window.MathJax && window.MathJax.typesetPromise) { MathJax.typesetPromise([equationsDiv]); }
+        }
+        
+        function updateVisibility() {
+            const selectedValue = document.querySelector('input[name="visibility"]:checked').value;
+            if (pointsObjects.f1) pointsObjects.f1.visible = (selectedValue === 'green' || selectedValue === 'both');
+            if (pointsObjects.f2) pointsObjects.f2.visible = (selectedValue === 'red' || selectedValue === 'both');
+        }
+
+        function mapToMobius(x_fractal, y_fractal) {
+            const u = x_fractal * 2 * Math.PI;
+            const v = (y_fractal - 0.5) * mobiusWidth;
+            const cos_u = Math.cos(u);
+            const sin_u = Math.sin(u);
+            const cos_u_half = Math.cos(u / 2);
+            const sin_u_half = Math.sin(u / 2);
+            const x = (R + v * cos_u_half) * cos_u;
+            const y = (R + v * cos_u_half) * sin_u;
+            const z = v * sin_u_half;
+            return new THREE.Vector3(x, y, z);
+        }
+
+        function generateFractalPoints(k) {
+            if (pointsObjects.f1) scene.remove(pointsObjects.f1);
+            if (pointsObjects.f2) scene.remove(pointsObjects.f2);
+            
+            const attractorPoints2D_f1 = [];
+            const attractorPoints2D_f2 = [];
+            let p_xy = { x: Math.random(), y: Math.random() };
+            const p1 = k;
+
+            for (let i = 0; i < NUM_POINTS; i++) {
+                let nx, ny, targetArray;
+                if (Math.random() < p1) {
+                    nx = p_xy.y; ny = k * p_xy.x;
+                    targetArray = attractorPoints2D_f1;
+                } else {
+                    nx = p_xy.y; ny = (1 - k) * p_xy.x + k;
+                    targetArray = attractorPoints2D_f2;
+                }
+                p_xy = { x: nx, y: ny };
+                if (i > 20) targetArray.push(p_xy);
+            }
+
+            const createPoints = (points, color) => {
+                if (points.length === 0) return null;
+                const positions = new Float32Array(points.length * 3);
+                points.forEach((p, idx) => {
+                    const p3d = mapToMobius(p.x, p.y);
+                    positions[idx * 3] = p3d.x;
+                    positions[idx * 3 + 1] = p3d.y;
+                    positions[idx * 3 + 2] = p3d.z;
+                });
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({ color: color, size: 0.015, sizeAttenuation: true });
+                return new THREE.Points(geometry, material);
+            };
+            
+            pointsObjects.f1 = createPoints(attractorPoints2D_f1, 0x76ff03);
+            pointsObjects.f2 = createPoints(attractorPoints2D_f2, 0xff1744);
+            
+            if (pointsObjects.f1) scene.add(pointsObjects.f1);
+            if (pointsObjects.f2) scene.add(pointsObjects.f2);
+            updateVisibility();
+        }
+
+        function createOrUpdateMobiusWireframe() {
+            if (mobiusMesh) {
+                scene.remove(mobiusMesh);
+                mobiusMesh.geometry.dispose();
+                mobiusMesh.material.dispose();
+            }
+            const mobiusFunction = (u_param, v_param, target) => {
+                const u = u_param * 2 * Math.PI;
+                const v = (v_param - 0.5) * mobiusWidth;
+                const cos_u = Math.cos(u);
+                const sin_u = Math.sin(u);
+                const cos_u_half = Math.cos(u / 2);
+                const sin_u_half = Math.sin(u / 2);
+                const x = (R + v * cos_u_half) * cos_u;
+                const y = (R + v * cos_u_half) * sin_u;
+                const z = v * sin_u_half;
+                target.set(x, y, z);
+            };
+            const mobiusGeom = new ParametricGeometry(mobiusFunction, 128, 16);
+            const mobiusMat = new THREE.MeshStandardMaterial({ 
+                color: 0x444444, wireframe: true, transparent: true, opacity: 0.15, side: THREE.DoubleSide 
+            });
+            mobiusMesh = new THREE.Mesh(mobiusGeom, mobiusMat);
+            scene.add(mobiusMesh);
+        }
+        
+        function regenerate() {
+            const k = parseFloat(kSlider.value);
+            kValueSpan.textContent = k.toFixed(2);
+            if (document.activeElement !== kText) { kText.value = k.toFixed(2); }
+            
+            mobiusWidth = parseFloat(pSlider.value);
+            pValueSpan.textContent = mobiusWidth.toFixed(2);
+            if (document.activeElement !== pText) { pText.value = mobiusWidth.toFixed(2); }
+
+            updateMathJax(k, mobiusWidth);
+            createOrUpdateMobiusWireframe();
+            generateFractalPoints(k);
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 100);
+            camera.position.set(0, 0, 5);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            kSlider.addEventListener('input', () => regenerate());
+            kText.addEventListener('change', (e) => {
+                let val = parseFloat(e.target.value); val = Math.max(0, Math.min(1, val)); e.target.value = val.toFixed(2); kSlider.value = val; regenerate();
+            });
+            pSlider.addEventListener('input', () => regenerate());
+            pText.addEventListener('change', (e) => {
+                let val = parseFloat(e.target.value);
+                // THAY ĐỔI: Giới hạn trên là 10
+                val = Math.max(0.1, Math.min(10, val)); 
+                e.target.value = val.toFixed(2); pSlider.value = val; regenerate();
+            });
+            visibilityControls.forEach(radio => radio.addEventListener('change', updateVisibility));
+            window.addEventListener('resize', () => {
+                camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            });
+            
+            regenerate();
+            
+            const box = new THREE.Box3().setFromObject(scene);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            camera.position.z = maxDim > 0 ? (Math.abs(maxDim / (2 * Math.tan(fov / 2))) * 1.5) : 5;
+            controls.target.copy(center);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
