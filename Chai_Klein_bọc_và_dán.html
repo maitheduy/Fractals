@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phòng Thí nghiệm: Dán và Bọc Fractal trên Chai Klein</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; background-color: #1a1a1a; color: #e0e0e0; overflow: hidden; }
+        #container { display: flex; width: 100vw; height: 100vh; }
+        #info-panel { flex: 0 0 50%; padding: 25px; background-color: #2c2c2c; box-shadow: 2px 0 10px rgba(0,0,0,0.5); overflow-y: auto; display: flex; flex-direction: column; }
+        #canvas-container { flex-grow: 1; position: relative; }
+        h1 { color: #4fc3f7; margin-top: 0; font-size: 1.8em; text-align: center; }
+        p { line-height: 1.6; font-size: 1.1em; }
+        #equations { background-color: #333; padding: 15px; border-radius: 8px; margin-top: auto; font-size: 1.0em; }
+        .equation-title { margin-bottom: 0.2em; margin-top: 1.0em; font-weight: bold; }
+        .control-group { margin: 15px 0; padding: 10px; border-left: 3px solid #444; }
+        .radio-group, .slider-container { display: flex; align-items: center; }
+        .radio-group { flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 10px;}
+        .radio-group div { display: flex; align-items: center; }
+        .radio-group input[type="radio"] { margin-right: 10px; cursor: pointer; }
+        .radio-group label { font-weight: normal; margin-bottom: 0; }
+        .slider-container { gap: 15px; margin-top: 10px; }
+        input[type="range"] { flex-grow: 1; cursor: pointer; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h1 id="title-text"></h1>
+            <div id="explanation-text"></div>
+            
+            <div class="control-group">
+                <label>1. Chọn Loại Fractal</label>
+                <div class="radio-group">
+                    <div>
+                        <input type="radio" id="fractal-sierpinski" name="fractal-type" value="sierpinski" checked>
+                        <label for="fractal-sierpinski">Thảm Sierpinski (8 hàm co)</label>
+                    </div>
+                    <div>
+                        <input type="radio" id="fractal-simple" name="fractal-type" value="simple">
+                        <label for="fractal-simple">IFS Đơn giản (2 hàm co)</label>
+                    </div>
+                </div>
+            </div>
+
+             <div class="control-group">
+                <label>2. Chọn Phương pháp</label>
+                <div class="radio-group">
+                    <div>
+                        <input type="radio" id="mode-glue" name="mode" value="glue" checked>
+                        <label for="mode-glue">Phép Dán (Tôpô)</label>
+                    </div>
+                    <div>
+                        <input type="radio" id="mode-wrap" name="mode" value="wrap">
+                        <label for="mode-wrap">Phép Bọc (Tham số)</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>3. Tinh chỉnh Tham số (chỉ áp dụng cho chế độ "Dán")</label>
+                <div id="k-slider-container">
+                    <label for="k-slider">Tham số k = <span id="k-value">0.50</span></label>
+                    <div class="slider-container">
+                        <input type="range" id="k-slider" min="0" max="1" value="0.5" step="0.01">
+                    </div>
+                </div>
+                <div>
+                    <label for="tx-slider">Dịch chuyển X (t<sub>x</sub>) = <span id="tx-value">0.00</span></label>
+                    <div class="slider-container">
+                        <input type="range" id="tx-slider" min="-1.0" max="1.0" value="0.0" step="0.01">
+                    </div>
+                </div>
+                <div>
+                    <label for="ty-slider">Dịch chuyển Y (t<sub>y</sub>) = <span id="ty-value">0.00</span></label>
+                    <div class="slider-container">
+                        <input type="range" id="ty-slider" min="-1.0" max="1.0" value="0.0" step="0.01">
+                    </div>
+                </div>
+            </div>
+
+            <div id="equations"></div>
+        </div>
+        <div id="canvas-container"></div>
+    </div>
+
+    <script> MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }, svg: { fontCache: 'global' } }; </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.164.1/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        const NUM_POINTS = 150000;
+
+        // --- Lấy tham chiếu đến tất cả các UI elements ---
+        const ui = {
+            title: document.getElementById('title-text'),
+            explanation: document.getElementById('explanation-text'),
+            equations: document.getElementById('equations'),
+            canvasContainer: document.getElementById('canvas-container'),
+            fractalTypeControls: document.querySelectorAll('input[name="fractal-type"]'),
+            modeControls: document.querySelectorAll('input[name="mode"]'),
+            kSlider: document.getElementById('k-slider'),
+            kValue: document.getElementById('k-value'),
+            kContainer: document.getElementById('k-slider-container'),
+            txSlider: document.getElementById('tx-slider'),
+            txValue: document.getElementById('tx-value'),
+            tySlider: document.getElementById('ty-slider'),
+            tyValue: document.getElementById('ty-value'),
+        };
+
+        // --- CÁC HÀM TIỆN ÍCH TOÁN HỌC ---
+        function applyKleinTopology(p) {
+            const u = p.u; const v = p.v;
+            const u_crossings = Math.floor(u);
+            const new_u = u - u_crossings;
+            let new_v = v - Math.floor(v);
+            if (Math.abs(u_crossings) % 2 === 1) { new_v = 1.0 - new_v; }
+            return { u: new_u, v: new_v };
+        }
+
+        const mapToClassic3D = (u_norm, v_norm) => {
+            const u = u_norm * 2 * Math.PI; const v = v_norm * 2 * Math.PI;
+            const scale = 0.25; const r = 4 * (1 - Math.cos(u) / 2);
+            let x, y, z;
+            if (u <= Math.PI) {
+                x = 6 * Math.cos(u) * (1 + Math.sin(u)) + r * Math.cos(u) * Math.cos(v);
+                y = 16 * Math.sin(u) + r * Math.sin(u) * Math.cos(v);
+            } else {
+                x = 6 * Math.cos(u) * (1 + Math.sin(u)) - r * Math.cos(v);
+                y = 16 * Math.sin(u);
+            }
+            z = r * Math.sin(v);
+            return new THREE.Vector3(x * scale, y * scale, z * scale);
+        };
+
+        // --- CÁC HÀM SINH FRACTAL ---
+        function generateSimpleIFS(mode, k, tx, ty) {
+            const attractorPoints2D = [[], []]; // 2 mảng cho 2 màu
+            let p_uv = { u: Math.random(), v: Math.random() };
+            if (mode === 'glue') {
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    let nu, nv, choice;
+                    if (Math.random() < 0.5) {
+                        nu = p_uv.v + tx; nv = k * p_uv.u + ty; choice = 0;
+                    } else {
+                        nu = p_uv.v + tx; nv = (1-k) * p_uv.u + k + ty; choice = 1;
+                    }
+                    p_uv = applyKleinTopology({ u: nu, v: nv });
+                    if (i > 50) attractorPoints2D[choice].push(p_uv);
+                }
+            } else { // wrap mode
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    let nu, nv, choice;
+                    if (Math.random() < 0.5) {
+                        nu = p_uv.v; nv = k * p_uv.u; choice = 0;
+                    } else {
+                        nu = p_uv.v; nv = (1-k) * p_uv.u + k; choice = 1;
+                    }
+                    p_uv = { u: nu, v: nv };
+                    if (i > 50) attractorPoints2D[choice].push(p_uv);
+                }
+            }
+            return attractorPoints2D;
+        }
+
+        function generateSierpinskiCarpet(mode, tx, ty) {
+            const attractorPoints2D = Array.from({ length: 8 }, () => []);
+            let p_uv = { u: Math.random(), v: Math.random() };
+            const transforms = [
+                { i: 0, j: 0 }, { i: 1, j: 0 }, { i: 2, j: 0 },
+                { i: 0, j: 1 },                 { i: 2, j: 1 },
+                { i: 0, j: 2 }, { i: 1, j: 2 }, { i: 2, j: 2 }
+            ];
+            if (mode === 'glue') {
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    const choice = Math.floor(Math.random() * 8);
+                    const transform = transforms[choice];
+                    let nu = (p_uv.u + transform.i) / 3 + tx;
+                    let nv = (p_uv.v + transform.j) / 3 + ty;
+                    p_uv = applyKleinTopology({ u: nu, v: nv });
+                    if (i > 50) attractorPoints2D[choice].push(p_uv);
+                }
+            } else { // wrap mode
+                 for (let i = 0; i < NUM_POINTS; i++) {
+                    const choice = Math.floor(Math.random() * 8);
+                    const transform = transforms[choice];
+                    let nu = (p_uv.u + transform.i) / 3;
+                    let nv = (p_uv.v + transform.j) / 3;
+                    p_uv = { u: nu, v: nv };
+                    if (i > 50) attractorPoints2D[choice].push(p_uv);
+                }
+            }
+            return attractorPoints2D;
+        }
+        
+        // --- CÁC HÀM CẬP NHẬT GIAO DIỆN ---
+        function updateUI(fractalType, mode) {
+            ui.kContainer.style.display = (fractalType === 'simple') ? 'block' : 'none';
+
+            let title = '';
+            let explanation = '';
+
+            if (fractalType === 'simple') title += 'IFS Đơn giản ';
+            else title += 'Thảm Sierpinski ';
+
+            if (mode === 'glue') {
+                title += '"DÁN" Tôpô lên Chai Klein';
+                explanation = `<p>Mô hình này sử dụng phép <strong>"dán" tôpô</strong>. Dùng các thanh trượt để đẩy fractal qua biên và quan sát nó được dán lại theo cách lật ngược đặc trưng.</p>`;
+            } else {
+                title += '"BỌC" Tham số lên Chai Klein';
+                explanation = `<p>Mô hình này sử dụng phép <strong>"bọc" tham số</strong>. Attractor được tạo ra trong hình vuông 2D rồi mới được "bọc" lên bề mặt 3D. Hãy chú ý các đường cắt gãy ở biên. Các thanh trượt dịch chuyển không có tác dụng trong chế độ này.</p>`;
+            }
+            ui.title.textContent = title;
+            ui.explanation.innerHTML = explanation;
+        }
+        
+        function updateMathJax(fractalType, k, tx, ty) {
+            let formula = '';
+            if (fractalType === 'simple') {
+                const h1 = `\\mathbf{h}_1(u,v) = \\begin{pmatrix} v \\\\ ${k.toFixed(2)}u \\end{pmatrix} + \\begin{pmatrix} ${tx.toFixed(2)} \\\\ ${ty.toFixed(2)} \\end{pmatrix}`;
+                const h2 = `\\mathbf{h}_2(u,v) = \\begin{pmatrix} v \\\\ ${(1-k).toFixed(2)}u+${k.toFixed(2)} \\end{pmatrix} + \\begin{pmatrix} ${tx.toFixed(2)} \\\\ ${ty.toFixed(2)} \\end{pmatrix}`;
+                formula = `<p class="equation-title">Hệ IFS (2 hàm):</p>$$ ${h1} $$$$ ${h2} $$`;
+            } else { // sierpinski
+                formula = `<p class="equation-title">Hệ IFS (8 hàm cho Thảm Sierpinski):</p>` + `$$ \\mathbf{h}_{ij}(u,v) = \\frac{1}{3} \\begin{pmatrix} u+i \\\\ v+j \\end{pmatrix} + \\begin{pmatrix} ${tx.toFixed(2)} \\\\ ${ty.toFixed(2)} \\end{pmatrix} $$`;
+            }
+            ui.equations.innerHTML = formula;
+            if (window.MathJax && window.MathJax.typeset) { MathJax.typesetPromise([ui.equations]).catch((err) => console.log('MathJax error:', err)); }
+        }
+
+        // --- QUY TRÌNH CHÍNH VÀ HIỂN THỊ ---
+        function regenerate() {
+            // 1. Đọc trạng thái từ UI
+            const fractalType = document.querySelector('input[name="fractal-type"]:checked').value;
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            const k = parseFloat(ui.kSlider.value);
+            const tx = parseFloat(ui.txSlider.value);
+            const ty = parseFloat(ui.tySlider.value);
+
+            // 2. Cập nhật giao diện
+            updateUI(fractalType, mode);
+            updateMathJax(fractalType, k, tx, ty);
+
+            // 3. Xóa các điểm cũ
+            scene.children.filter(obj => obj.type === 'Points').forEach(obj => {
+                obj.geometry.dispose(); obj.material.dispose(); scene.remove(obj);
+            });
+            
+            // 4. Sinh dữ liệu mới
+            let attractorPoints2D;
+            if (fractalType === 'simple') {
+                attractorPoints2D = generateSimpleIFS(mode, k, tx, ty);
+            } else {
+                attractorPoints2D = generateSierpinskiCarpet(mode, tx, ty);
+            }
+
+            // 5. Hiển thị dữ liệu
+            const simplePalette = [new THREE.Color(0x76ff03), new THREE.Color(0xff1744)];
+            const sierpinskiPalette = [
+                new THREE.Color(0xff0000), new THREE.Color(0xffa500), new THREE.Color(0xffff00),
+                new THREE.Color(0x00ff00), new THREE.Color(0x0000ff),
+                new THREE.Color(0x4b0082), new THREE.Color(0x9400d3), new THREE.Color(0xee82ee)
+            ];
+            const activePalette = (fractalType === 'simple') ? simplePalette : sierpinskiPalette;
+            
+            attractorPoints2D.forEach((points, index) => {
+                if (points.length === 0) return;
+                const positions = [];
+                points.forEach(p => {
+                    const p3d = mapToClassic3D(p.u, p.v);
+                    positions.push(p3d.x, p3d.y, p3d.z);
+                });
+                const geom = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                const material = new THREE.PointsMaterial({ color: activePalette[index], size: 0.02 });
+                scene.add(new THREE.Points(geom, material));
+            });
+        }
+        
+        // --- KHỞI TẠO ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            camera = new THREE.PerspectiveCamera(75, ui.canvasContainer.clientWidth / ui.canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(3, 3, 3);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(ui.canvasContainer.clientWidth, ui.canvasContainer.clientHeight);
+            ui.canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0, 0);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            scene.add(new THREE.DirectionalLight(0xffffff, 0.8).position.set(1, 1, 1));
+            
+            // Thêm tất cả các event listeners
+            ui.fractalTypeControls.forEach(radio => radio.addEventListener('change', regenerate));
+            ui.modeControls.forEach(radio => radio.addEventListener('change', regenerate));
+            ui.kSlider.addEventListener('input', e => { ui.kValue.textContent = parseFloat(e.target.value).toFixed(2); regenerate(); });
+            ui.txSlider.addEventListener('input', e => { ui.txValue.textContent = parseFloat(e.target.value).toFixed(2); regenerate(); });
+            ui.tySlider.addEventListener('input', e => { ui.tyValue.textContent = parseFloat(e.target.value).toFixed(2); regenerate(); });
+
+            window.addEventListener('resize', () => { if (ui.canvasContainer) { camera.aspect = ui.canvasContainer.clientWidth / ui.canvasContainer.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(ui.canvasContainer.clientWidth, ui.canvasContainer.clientHeight); }});
+            
+            regenerate();
+            (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+        }
+        init();
+    </script>
+</body>
+</html>
