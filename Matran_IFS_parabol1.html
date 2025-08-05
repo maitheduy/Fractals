@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình diễn IFS cho Parabol (Tương tác)</title>
+    
+    <!-- MathJax for beautiful math rendering -->
+    <script>
+        MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']]
+          },
+          svg: {
+            fontCache: 'global'
+          }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --panel-bg: #ffffff;
+            --primary-color: #4a7a9c;
+            --secondary-color: #7d9cb3;
+            --text-color: #343a40;
+            --border-color: #dee2e6;
+            --grid-color: #e9ecef;
+            --axis-color: #adb5bd;
+            --f1-color: #28a745;
+            --f2-color: #dc3545;
+            --parabola-color: #6c757d;
+            --shadow-color: rgba(0, 0, 0, 0.07);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2em;
+        }
+        .app-container { max-width: 1400px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 2em; }
+        header h1 { color: var(--primary-color); font-size: 2.5em; font-weight: 600; margin: 0; }
+        header p { font-size: 1.1em; color: var(--secondary-color); max-width: 700px; margin: 0.5em auto 0; }
+        .main-content { display: grid; grid-template-columns: 480px 1fr; gap: 2em; align-items: flex-start; }
+        .panel { background-color: var(--panel-bg); border-radius: 12px; box-shadow: 0 5px 20px var(--shadow-color); padding: 1.5em 2em; border: 1px solid var(--border-color); }
+        h2 { font-size: 1.4em; color: var(--primary-color); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5em; margin: 0 0 1.5em 0; }
+        .slider-group { display: grid; grid-template-columns: 40px 1fr 60px; align-items: center; gap: 1em; margin-bottom: 1em; }
+        .slider-group label { font-weight: 500; font-size: 1.1em; }
+        .slider-group span { font-family: "SF Mono", "Fira Code", "Courier New", monospace; text-align: right; padding: 0.3em 0.5em; background-color: var(--bg-color); border-radius: 6px; border: 1px solid var(--border-color); }
+        input[type="range"] { -webkit-appearance: none; width: 100%; height: 6px; background: #e9ecef; border-radius: 5px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background: var(--primary-color); cursor: pointer; border-radius: 50%; border: 3px solid var(--panel-bg); box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+        #equations { margin-top: 1em; font-size: 1.1em; line-height: 2.5; }
+        .canvas-container { position: relative; padding: 0; }
+        canvas { width: 100%; height: 100%; min-height: 650px; display: block; cursor: grab; }
+        canvas:active { cursor: grabbing; }
+        #error-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(255, 255, 255, 0.95); color: var(--f2-color); padding: 2em 3em; border: 2px solid var(--f2-color); border-radius: 10px; font-size: 1.2em; font-weight: bold; text-align: center; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); transition: opacity 0.3s; z-index: 10; }
+        .error-hidden { display: none; opacity: 0; }
+        .zoom-controls { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 5px; }
+        .zoom-controls button { width: 30px; height: 30px; font-size: 18px; font-weight: bold; border: 1px solid var(--border-color); background-color: var(--panel-bg); color: var(--primary-color); border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        .zoom-controls button:hover { background-color: var(--bg-color); }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <h1>Trình diễn IFS cho Parabol (Tương tác)</h1>
+            <p>Sử dụng các thanh trượt để thay đổi Parabol, và dùng chuột (cuộn/kéo) để khám phá không gian tọa độ.</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="panel controls-panel">
+                <h2>Bảng điều khiển</h2>
+                
+                <div class="slider-group">
+                    <label for="sliderA">A:</label>
+                    <input type="range" id="sliderA" min="-5" max="5" value="-1" step="0.1">
+                    <span id="valA">-1.00</span>
+                </div>
+                <div class="slider-group">
+                    <label for="sliderB">B:</label>
+                    <input type="range" id="sliderB" min="-5" max="5" value="1" step="0.1">
+                    <span id="valB">1.00</span>
+                </div>
+                <div class="slider-group">
+                    <label for="sliderC">C:</label>
+                    <input type="range" id="sliderC" min="-5" max="5" value="0" step="0.1">
+                    <span id="valC">0.00</span>
+                </div>
+                 <div class="slider-group">
+                    <label for="sliderX0">x₀:</label>
+                    <input type="range" id="sliderX0" min="-4" max="4" value="0" step="0.1">
+                    <span id="valX0">0.00</span>
+                </div>
+                <div class="slider-group">
+                    <label for="sliderX1">x₁:</label>
+                    <input type="range" id="sliderX1" min="-4" max="4" value="1" step="0.1">
+                    <span id="valX1">1.00</span>
+                </div>
+    
+                <div id="equations">
+                    <h2>Các Ma trận Đại diện</h2>
+                    <div id="parabola-eq"></div>
+                    <div id="f1-eq"></div>
+                    <div id="f2-eq"></div>
+                </div>
+            </div>
+    
+            <div class="panel canvas-container">
+                <canvas id="chaos-game"></canvas>
+                <div class="zoom-controls">
+                    <button id="zoom-in">+</button>
+                    <button id="zoom-out">-</button>
+                    <button id="reset-view">⟳</button>
+                </div>
+                <div id="error-message" class="error-hidden">Lỗi: Giá trị x₀ phải nhỏ hơn x₁</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('chaos-game');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+
+            const sliders = document.querySelectorAll('input[type="range"]');
+            sliders.forEach(slider => slider.addEventListener('input', updateAll));
+            
+            setupInteraction(canvas);
+            updateAll();
+        });
+
+        const NUM_POINTS = 50000;
+        const INITIAL_VIEW = { xMin: -4, xMax: 4, yMin: -4, yMax: 4 };
+        let currentView = { ...INITIAL_VIEW };
+        
+        let currentParams = {}; 
+        let currentFunctions = {};
+
+        function format(num) {
+            return num.toFixed(2);
+        }
+
+        function updateAll() {
+            const sliders = { A: document.getElementById('sliderA'), B: document.getElementById('sliderB'), C: document.getElementById('sliderC'), x0: document.getElementById('sliderX0'), x1: document.getElementById('sliderX1') };
+            const vals = { A: document.getElementById('valA'), B: document.getElementById('valB'), C: document.getElementById('valC'), x0: document.getElementById('valX0'), x1: document.getElementById('valX1') };
+            
+            const A = parseFloat(sliders.A.value);
+            const B = parseFloat(sliders.B.value);
+            const C = parseFloat(sliders.C.value);
+            const x0 = parseFloat(sliders.x0.value);
+            const x1 = parseFloat(sliders.x1.value);
+            currentParams = { A, B, C, x0, x1 };
+            Object.keys(vals).forEach(key => vals[key].textContent = format(currentParams[key]));
+
+            const errorMessage = document.getElementById('error-message');
+            const canvas = document.getElementById('chaos-game');
+            const ctx = canvas.getContext('2d');
+            if (x0 >= x1) {
+                errorMessage.classList.remove('error-hidden');
+                errorMessage.style.opacity = '1';
+                ctx.clearRect(0, 0, canvas.getBoundingClientRect().width, canvas.getBoundingClientRect().height);
+                return;
+            }
+            errorMessage.classList.add('error-hidden');
+            errorMessage.style.opacity = '0';
+            
+            const a1 = 0.5, e1 = 0.5 * x0, c1 = a1 * a1, b1 = 2 * a1 * A * e1 + B * a1 * (1 - a1), f1_t = A * e1 * e1 + B * e1 + C * (1 - a1 * a1);
+            const a2 = -0.5, e2 = x1 + 0.5 * x0, c2 = a2 * a2, b2 = 2 * a2 * A * e2 + B * a2 * (1 - a2), f2_t = A * e2 * e2 + B * e2 + C * (1 - a2 * a2);
+
+            currentFunctions.f1 = { M: [[a1, 0], [b1, c1]], t: [e1, f1_t] };
+            currentFunctions.f2 = { M: [[a2, 0], [b2, c2]], t: [e2, f2_t] };
+            
+            updateEquations();
+            redrawCanvas();
+        }
+
+        function updateEquations() {
+            const { A, B, C } = currentParams;
+            const { f1, f2 } = currentFunctions;
+            
+            const parabolaEqDiv = document.getElementById('parabola-eq');
+            const f1EqDiv = document.getElementById('f1-eq');
+            const f2EqDiv = document.getElementById('f2-eq');
+            
+            // --- FIX START: Removed \mat ---
+            const parabolaMatrix = `\\mathbf{M}_{P} = \\begin{pmatrix} ${format(A)} & 0 & ${format(B/2)} \\\\ 0 & 0 & -0.5 \\\\ ${format(B/2)} & -0.5 & ${format(C)} \\end{pmatrix}`;
+            parabolaEqDiv.innerHTML = `\\[${parabolaMatrix}\\]`;
+
+            const f1Matrix = `\\mathbf{M}_{f1} = \\begin{pmatrix} ${format(f1.M[0][0])} & 0 & ${format(f1.t[0])} \\\\ ${format(f1.M[1][0])} & ${format(f1.M[1][1])} & ${format(f1.t[1])} \\\\ 0 & 0 & 1 \\end{pmatrix}`;
+            f1EqDiv.innerHTML = `\\[${f1Matrix}\\]`;
+            
+            const f2Matrix = `\\mathbf{M}_{f2} = \\begin{pmatrix} ${format(f2.M[0][0])} & 0 & ${format(f2.t[0])} \\\\ ${format(f2.M[1][0])} & ${format(f2.M[1][1])} & ${format(f2.t[1])} \\\\ 0 & 0 & 1 \\end{pmatrix}`;
+            f2EqDiv.innerHTML = `\\[${f2Matrix}\\]`;
+            // --- FIX END ---
+
+            if (window.MathJax) {
+                 MathJax.typesetPromise([parabolaEqDiv, f1EqDiv, f2EqDiv]).catch((err) => console.log('MathJax error: ', err.message));
+            }
+        }
+
+        function redrawCanvas() {
+            const { A, B, C, x0, x1 } = currentParams;
+            const { f1, f2 } = currentFunctions;
+            if (!f1 || !f2) return;
+            drawScene(A, B, C, x0, x1, f1, f2);
+        }
+        
+        function drawGridAndAxes(ctx, mapToCanvas) {
+            const { xMin, xMax, yMin, yMax } = currentView;
+            const rootStyle = getComputedStyle(document.documentElement);
+            const dpr = window.devicePixelRatio || 1;
+
+            // --- FIX START: Set step to 0.2 for smaller grid lines ---
+            const xStep = 0.2;
+            const yStep = 0.2;
+            // --- FIX END ---
+
+            ctx.strokeStyle = rootStyle.getPropertyValue('--grid-color');
+            ctx.lineWidth = 1;
+            ctx.font = `${10 * dpr}px sans-serif`;
+            
+            for (let x = Math.ceil(xMin / xStep) * xStep; x < xMax; x += xStep) {
+                if (Math.abs(x) < 1e-9) continue;
+                const p = mapToCanvas(x, yMin), p2 = mapToCanvas(x, yMax);
+                ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+            }
+            for (let y = Math.ceil(yMin / yStep) * yStep; y < yMax; y += yStep) {
+                 if (Math.abs(y) < 1e-9) continue;
+                const p = mapToCanvas(xMin, y), p2 = mapToCanvas(xMax, y);
+                ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+            }
+            
+            ctx.strokeStyle = rootStyle.getPropertyValue('--axis-color');
+            ctx.fillStyle = rootStyle.getPropertyValue('--secondary-color');
+            ctx.lineWidth = 1.5;
+
+            const xAxisY = mapToCanvas(0, 0).y;
+            const yAxisX = mapToCanvas(0, 0).x;
+            const canvasWidth = ctx.canvas.width;
+            const canvasHeight = ctx.canvas.height;
+
+            if(xAxisY >= 0 && xAxisY <= canvasHeight) {
+                ctx.beginPath(); ctx.moveTo(0, xAxisY); ctx.lineTo(canvasWidth, xAxisY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(canvasWidth, xAxisY); ctx.lineTo(canvasWidth - 10*dpr, xAxisY - 5*dpr); ctx.lineTo(canvasWidth - 10*dpr, xAxisY + 5*dpr); ctx.closePath(); ctx.fill();
+                ctx.fillText('x', canvasWidth - 15*dpr, xAxisY - 15*dpr);
+            }
+            if(yAxisX >= 0 && yAxisX <= canvasWidth) {
+                ctx.beginPath(); ctx.moveTo(yAxisX, 0); ctx.lineTo(yAxisX, canvasHeight); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(yAxisX, 0); ctx.lineTo(yAxisX - 5*dpr, 10*dpr); ctx.lineTo(yAxisX + 5*dpr, 10*dpr); ctx.closePath(); ctx.fill();
+                ctx.fillText('y', yAxisX + 15*dpr, 10*dpr);
+            }
+
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            for (let x = Math.ceil(xMin / xStep) * xStep; x < xMax; x += xStep) {
+                 if (Math.abs(x) < 1e-9) continue;
+                 const p = mapToCanvas(x, 0);
+                 if(p.y > 0 && p.y < canvasHeight) ctx.fillText(x.toFixed(1), p.x, p.y + 5*dpr);
+            }
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            for (let y = Math.ceil(yMin / yStep) * yStep; y < yMax; y += yStep) {
+                 if (Math.abs(y) < 1e-9) continue;
+                 const p = mapToCanvas(0, y);
+                 if(p.x > 0 && p.x < canvasWidth) ctx.fillText(y.toFixed(1), p.x - 5*dpr, p.y);
+            }
+
+            const origin = mapToCanvas(0,0);
+            if(origin.x > 0 && origin.x < canvasWidth && origin.y > 0 && origin.y < canvasHeight) {
+                ctx.fillText('O', origin.x - 8*dpr, origin.y + 8*dpr);
+            }
+        }
+        
+        function drawScene(A, B, C, x0, x1, f1, f2) {
+            const canvas = document.getElementById('chaos-game');
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+
+            const mapToCanvas = (x, y) => {
+                const px = ((x - currentView.xMin) / (currentView.xMax - currentView.xMin)) * rect.width;
+                const py = rect.height - ((y - currentView.yMin) / (currentView.yMax - currentView.yMin)) * rect.height;
+                return { x: px * dpr, y: py * dpr };
+            };
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGridAndAxes(ctx, mapToCanvas);
+
+            ctx.save();
+            ctx.beginPath(); ctx.rect(0, 0, canvas.width, canvas.height); ctx.clip();
+            const parabola = (x) => A * x * x + B * x + C;
+            ctx.beginPath();
+            ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--parabola-color');
+            ctx.lineWidth = 2 * dpr; ctx.lineCap = 'round';
+            const steps = 400; 
+            const startPoint = mapToCanvas(x0, parabola(x0));
+            ctx.moveTo(startPoint.x, startPoint.y);
+            for (let i = 1; i <= steps; i++) {
+                const x = x0 + (x1 - x0) * (i / steps);
+                const p = mapToCanvas(x, parabola(x));
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+            ctx.restore(); 
+
+            let currentPoint = { x: x0, y: parabola(x0) };
+            const f1Color = 'rgba(40, 167, 69, 0.7)';
+            const f2Color = 'rgba(220, 53, 69, 0.7)';
+            const pointSize = 1.5 * dpr;
+            
+            for (let i = 0; i < NUM_POINTS; i++) {
+                const choice = Math.random() < 0.5 ? f1 : f2;
+                
+                const nextX = choice.M[0][0] * currentPoint.x + choice.M[0][1] * currentPoint.y + choice.t[0];
+                const nextY = choice.M[1][0] * currentPoint.x + choice.M[1][1] * currentPoint.y + choice.t[1];
+                currentPoint = { x: nextX, y: nextY };
+                
+                if (i > 50) { 
+                    const p = mapToCanvas(currentPoint.x, currentPoint.y);
+                    ctx.fillStyle = (choice === f1) ? f1Color : f2Color;
+                    ctx.fillRect(p.x, p.y, pointSize, pointSize);
+                }
+            }
+        }
+
+        function setupInteraction(canvas) {
+            let isPanning = false;
+            let lastPanPosition = { x: 0, y: 0 };
+
+            const mapCanvasToWorld = (px, py) => {
+                const rect = canvas.getBoundingClientRect();
+                const worldX = currentView.xMin + (px / rect.width) * (currentView.xMax - currentView.xMin);
+                const worldY = currentView.yMin + ((rect.height - py) / rect.height) * (currentView.yMax - currentView.yMin);
+                return { x: worldX, y: worldY };
+            };
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const mouseWorld = mapCanvasToWorld(mouseX, mouseY);
+                
+                const zoomFactor = e.deltaY < 0 ? 0.9 : 1.1;
+
+                currentView.xMin = mouseWorld.x - (mouseWorld.x - currentView.xMin) * zoomFactor;
+                currentView.xMax = mouseWorld.x + (currentView.xMax - currentView.x) * zoomFactor;
+                currentView.yMin = mouseWorld.y - (mouseWorld.y - currentView.yMin) * zoomFactor;
+                currentView.yMax = mouseWorld.y + (currentView.yMax - mouseWorld.y) * zoomFactor;
+                
+                redrawCanvas();
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                isPanning = true;
+                lastPanPosition = { x: e.clientX, y: e.clientY };
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isPanning) return;
+                const rect = canvas.getBoundingClientRect();
+                const dx = e.clientX - lastPanPosition.x;
+                const dy = e.clientY - lastPanPosition.y;
+
+                const worldDx = (dx / rect.width) * (currentView.xMax - currentView.xMin);
+                const worldDy = (dy / rect.height) * (currentView.yMax - currentView.yMin);
+
+                currentView.xMin -= worldDx;
+                currentView.xMax -= worldDx;
+                currentView.yMin += worldDy;
+                currentView.yMax += worldDy;
+
+                lastPanPosition = { x: e.clientX, y: e.clientY };
+                redrawCanvas();
+            });
+
+            const stopPanning = () => { isPanning = false; };
+            canvas.addEventListener('mouseup', stopPanning);
+            canvas.addEventListener('mouseleave', stopPanning);
+
+            document.getElementById('zoom-in').addEventListener('click', () => {
+                const rect = canvas.getBoundingClientRect();
+                const center = mapCanvasToWorld(rect.width / 2, rect.height / 2);
+                const zoomFactor = 0.8;
+                currentView.xMin = center.x - (center.x - currentView.xMin) * zoomFactor;
+                currentView.xMax = center.x + (currentView.xMax - center.x) * zoomFactor;
+                currentView.yMin = center.y - (center.y - currentView.yMin) * zoomFactor;
+                currentView.yMax = center.y + (currentView.yMax - center.y) * zoomFactor;
+                redrawCanvas();
+            });
+            document.getElementById('zoom-out').addEventListener('click', () => {
+                 const rect = canvas.getBoundingClientRect();
+                const center = mapCanvasToWorld(rect.width / 2, rect.height / 2);
+                const zoomFactor = 1.25;
+                currentView.xMin = center.x - (center.x - currentView.xMin) * zoomFactor;
+                currentView.xMax = center.x + (currentView.xMax - center.x) * zoomFactor;
+                currentView.yMin = center.y - (center.y - currentView.yMin) * zoomFactor;
+                currentView.yMax = center.y + (currentView.yMax - center.y) * zoomFactor;
+                redrawCanvas();
+            });
+            document.getElementById('reset-view').addEventListener('click', () => {
+                currentView = { ...INITIAL_VIEW };
+                redrawCanvas();
+            });
+        }
+    </script>
+</body>
+</html>
