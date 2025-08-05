@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình diễn Hệ hàm co cho Parabol</title>
+    
+    <!-- MathJax for beautiful math rendering -->
+    <script>
+        MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']]
+          },
+          svg: {
+            fontCache: 'global'
+          }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <style>
+        /* --- General Styles & Color Palette --- */
+        :root {
+            --bg-color: #f8f9fa;
+            --panel-bg: #ffffff;
+            --primary-color: #4a7a9c;
+            --secondary-color: #7d9cb3;
+            --text-color: #343a40;
+            --border-color: #dee2e6;
+            --grid-color: #e9ecef;
+            --axis-color: #adb5bd;
+            --f1-color: #28a745; /* Green */
+            --f2-color: #dc3545; /* Red */
+            --parabola-color: #6c757d; /* Darker Gray */
+            --shadow-color: rgba(0, 0, 0, 0.07);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2em;
+        }
+        
+        /* --- Main Layout & Structure --- */
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2em;
+        }
+
+        header h1 {
+            color: var(--primary-color);
+            font-size: 2.5em;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        header p {
+            font-size: 1.1em;
+            color: var(--secondary-color);
+            max-width: 700px;
+            margin: 0.5em auto 0;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 450px 1fr;
+            gap: 2em;
+            align-items: flex-start;
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            box-shadow: 0 5px 20px var(--shadow-color);
+            padding: 1.5em 2em;
+            border: 1px solid var(--border-color);
+        }
+        
+        h2 {
+            font-size: 1.4em;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5em;
+            margin: 0 0 1.5em 0;
+        }
+
+        /* --- Controls Panel --- */
+        .slider-group {
+            display: grid;
+            grid-template-columns: 40px 1fr 60px;
+            align-items: center;
+            gap: 1em;
+            margin-bottom: 1em;
+        }
+
+        .slider-group label {
+            font-weight: 500;
+            font-size: 1.1em;
+        }
+
+        .slider-group span {
+            font-family: "SF Mono", "Fira Code", "Courier New", monospace;
+            text-align: right;
+            padding: 0.3em 0.5em;
+            background-color: var(--bg-color);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 5px;
+            outline: none;
+            transition: opacity 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--primary-color);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 3px solid var(--panel-bg);
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--primary-color);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 3px solid var(--panel-bg);
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+
+        #equations {
+            margin-top: 2em;
+            font-size: 1.1em;
+            line-height: 2.5;
+            min-height: 300px;
+        }
+
+        /* --- Visualization Panel --- */
+        .canvas-container {
+             position: relative;
+             height: 100%;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            min-height: 650px;
+            display: block;
+        }
+
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.95);
+            color: var(--f2-color);
+            padding: 2em 3em;
+            border: 2px solid var(--f2-color);
+            border-radius: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: opacity 0.3s;
+        }
+
+        .error-hidden {
+            display: none;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <h1>Trình diễn Hệ hàm co cho Parabol</h1>
+            <p>Một ứng dụng web tương tác để minh họa thuật toán xây dựng ngược hệ IFS cho một cung parabol tổng quát.</p>
+        </header>
+        
+        <div class="main-content">
+            <div class="panel controls-panel">
+                <h2>Bảng điều khiển</h2>
+                
+                <div class="slider-group">
+                    <label for="sliderA">A:</label>
+                    <input type="range" id="sliderA" min="-5" max="5" value="-1" step="0.1">
+                    <span id="valA">-1.00</span>
+                </div>
+                <div class="slider-group">
+                    <label for="sliderB">B:</label>
+                    <input type="range" id="sliderB" min="-5" max="5" value="1" step="0.1">
+                    <span id="valB">1.00</span>
+                </div>
+                <div class="slider-group">
+                    <label for="sliderC">C:</label>
+                    <input type="range" id="sliderC" min="-5" max="5" value="0" step="0.1">
+                    <span id="valC">0.00</span>
+                </div>
+                 <div class="slider-group">
+                    <label for="sliderX0">x₀:</label>
+                    <input type="range" id="sliderX0" min="-2" max="2" value="0" step="0.1">
+                    <span id="valX0">0.00</span>
+                </div>
+                <div class="slider-group">
+                    <label for="sliderX1">x₁:</label>
+                    <input type="range" id="sliderX1" min="-2" max="2" value="1" step="0.1">
+                    <span id="valX1">1.00</span>
+                </div>
+    
+                <div id="equations">
+                    <h2>Công thức Động</h2>
+                    <div id="parabola-eq"></div>
+                    <div id="f1-eq"></div>
+                    <div id="f2-eq"></div>
+                </div>
+            </div>
+    
+            <div class="panel canvas-container">
+                <canvas id="chaos-game"></canvas>
+                <div id="error-message" class="error-hidden">Lỗi: Giá trị x₀ phải nhỏ hơn x₁</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('chaos-game');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+
+            const sliders = document.querySelectorAll('input[type="range"]');
+            sliders.forEach(slider => slider.addEventListener('input', updateAndDraw));
+            updateAndDraw();
+        });
+
+        const NUM_POINTS = 50000;
+
+        function formatNumber(num, precision = 2) {
+            return num.toFixed(precision);
+        }
+
+        function updateAndDraw() {
+            const canvas = document.getElementById('chaos-game');
+            const ctx = canvas.getContext('2d');
+            const errorMessage = document.getElementById('error-message');
+            
+            const sliders = { A: document.getElementById('sliderA'), B: document.getElementById('sliderB'), C: document.getElementById('sliderC'), x0: document.getElementById('sliderX0'), x1: document.getElementById('sliderX1') };
+            const vals = { A: document.getElementById('valA'), B: document.getElementById('valB'), C: document.getElementById('valC'), x0: document.getElementById('valX0'), x1: document.getElementById('valX1') };
+
+            const A = parseFloat(sliders.A.value);
+            const B = parseFloat(sliders.B.value);
+            const C = parseFloat(sliders.C.value);
+            const x0 = parseFloat(sliders.x0.value);
+            const x1 = parseFloat(sliders.x1.value);
+
+            Object.keys(vals).forEach(key => vals[key].textContent = formatNumber(eval(key)));
+
+            if (x0 >= x1) {
+                errorMessage.classList.remove('error-hidden');
+                errorMessage.style.opacity = '1';
+                ctx.clearRect(0, 0, canvas.getBoundingClientRect().width, canvas.getBoundingClientRect().height);
+                return;
+            }
+            errorMessage.classList.add('error-hidden');
+            errorMessage.style.opacity = '0';
+            
+            const e1 = 0.5 * x0;
+            const b1 = 0.25 * B + 0.5 * A * x0;
+            const f1_t = 0.75 * C + 0.25 * A * x0 * x0 + 0.5 * B * x0;
+            
+            const e2 = x1 + 0.5 * x0;
+            const b2 = -0.75 * B - A * e2;
+            const f2_t = 0.75 * C + A * e2 * e2 + B * e2;
+
+            const f1 = { M: [[0.5, 0], [b1, 0.25]], t: [e1, f1_t] };
+            const f2 = { M: [[-0.5, 0], [b2, 0.25]], t: [e2, f2_t] };
+            
+            updateEquations(A, B, C, f1, f2);
+            drawScene(A, B, C, x0, x1, f1, f2);
+        }
+
+        function updateEquations(A, B, C, f1, f2) {
+            const parabolaEqDiv = document.getElementById('parabola-eq');
+            const f1EqDiv = document.getElementById('f1-eq');
+            const f2EqDiv = document.getElementById('f2-eq');
+            
+            const B_sign = B < 0 ? '-' : '+';
+            const C_sign = C < 0 ? '-' : '+';
+            const parabolaString = `y = ${formatNumber(A)}x^2 ${B_sign} ${formatNumber(Math.abs(B))}x ${C_sign} ${formatNumber(Math.abs(C))}`;
+            parabolaEqDiv.innerHTML = `\\[${parabolaString}\\]`;
+
+            const f1String = `f_1\\begin{pmatrix}x\\\\y\\end{pmatrix} = \\begin{pmatrix} ${formatNumber(f1.M[0][0])} & 0 \\\\ ${formatNumber(f1.M[1][0])} & ${formatNumber(f1.M[1][1])} \\end{pmatrix} \\begin{pmatrix}x\\\\y\\end{pmatrix} + \\begin{pmatrix} ${formatNumber(f1.t[0])} \\\\ ${formatNumber(f1.t[1])} \\end{pmatrix}`;
+            f1EqDiv.innerHTML = `\\[${f1String}\\]`;
+            
+            const f2String = `f_2\\begin{pmatrix}x\\\\y\\end{pmatrix} = \\begin{pmatrix} ${formatNumber(f2.M[0][0])} & 0 \\\\ ${formatNumber(f2.M[1][0])} & ${formatNumber(f2.M[1][1])} \\end{pmatrix} \\begin{pmatrix}x\\\\y\\end{pmatrix} + \\begin{pmatrix} ${formatNumber(f2.t[0])} \\\\ ${formatNumber(f2.t[1])} \\end{pmatrix}`;
+            f2EqDiv.innerHTML = `\\[${f2String}\\]`;
+
+            if (window.MathJax) {
+                 MathJax.typesetPromise([parabolaEqDiv, f1EqDiv, f2EqDiv]).catch((err) => console.log('MathJax error: ', err.message));
+            }
+        }
+        
+        // --- NEW DRAWING FUNCTION ---
+        function drawGridAndAxes(ctx, view, mapToCanvas) {
+            const { xMin, xMax, yMin, yMax } = view;
+            
+            // Function to calculate a "nice" step for grid lines
+            function calculateNiceStep(range) {
+                const exponent = Math.floor(Math.log10(range));
+                const powerOf10 = Math.pow(10, exponent);
+                const magnitude = range / powerOf10; // between 1 and 10
+                if (magnitude < 2) return 0.2 * powerOf10;
+                if (magnitude < 5) return 0.5 * powerOf10;
+                return 1.0 * powerOf10;
+            }
+
+            const xStep = calculateNiceStep(xMax - xMin);
+            const yStep = calculateNiceStep(yMax - yMin);
+
+            ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid-color');
+            ctx.lineWidth = 1;
+            ctx.font = "10px sans-serif";
+            
+            // Draw vertical grid lines and x-axis ticks
+            for (let x = Math.ceil(xMin / xStep) * xStep; x < xMax; x += xStep) {
+                if (Math.abs(x) < 1e-9) continue; // Skip axis line
+                const p = mapToCanvas(x, yMin);
+                const p2 = mapToCanvas(x, yMax);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+
+            // Draw horizontal grid lines and y-axis ticks
+            for (let y = Math.ceil(yMin / yStep) * yStep; y < yMax; y += yStep) {
+                 if (Math.abs(y) < 1e-9) continue; // Skip axis line
+                const p = mapToCanvas(xMin, y);
+                const p2 = mapToCanvas(xMax, y);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+            
+            // Draw main axes
+            ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--axis-color');
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--secondary-color');
+            ctx.lineWidth = 1.5;
+
+            // X-axis
+            if (yMin < 0 && yMax > 0) {
+                const start = mapToCanvas(xMin, 0);
+                const end = mapToCanvas(xMax, 0);
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+                // Arrow
+                ctx.beginPath();
+                ctx.moveTo(end.x, end.y);
+                ctx.lineTo(end.x - 8, end.y - 4);
+                ctx.lineTo(end.x - 8, end.y + 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillText('x', end.x + 5, end.y + 4);
+            }
+            // Y-axis
+             if (xMin < 0 && xMax > 0) {
+                const start = mapToCanvas(0, yMin);
+                const end = mapToCanvas(0, yMax);
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+                // Arrow
+                ctx.beginPath();
+                ctx.moveTo(end.x, end.y);
+                ctx.lineTo(end.x - 4, end.y + 8);
+                ctx.lineTo(end.x + 4, end.y + 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillText('y', end.x + 5, end.y - 2);
+            }
+
+            // Draw axis labels
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for (let x = Math.ceil(xMin / xStep) * xStep; x < xMax; x += xStep) {
+                 if (Math.abs(x) < 1e-9) continue;
+                 const p = mapToCanvas(x, 0);
+                 ctx.fillText(x.toFixed(1), p.x, p.y + 5);
+            }
+            
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+             for (let y = Math.ceil(yMin / yStep) * yStep; y < yMax; y += yStep) {
+                 if (Math.abs(y) < 1e-9) continue;
+                 const p = mapToCanvas(0, y);
+                 ctx.fillText(y.toFixed(1), p.x - 5, p.y);
+            }
+
+            // Origin Label 'O'
+            if (xMin < 0 && xMax > 0 && yMin < 0 && yMax > 0) {
+                const origin = mapToCanvas(0, 0);
+                ctx.fillText('O', origin.x - 5, origin.y + 5);
+            }
+        }
+
+        function drawScene(A, B, C, x0, x1, f1, f2) {
+            const canvas = document.getElementById('chaos-game');
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+
+            const parabola = (x) => A * x * x + B * x + C;
+            let yMin = Math.min(parabola(x0), parabola(x1));
+            let yMax = Math.max(parabola(x0), parabola(x1));
+            const vertexX = (A === 0) ? Infinity : -B / (2 * A);
+            if (vertexX > x0 && vertexX < x1) {
+                const vertexY = parabola(vertexX);
+                yMin = Math.min(yMin, vertexY);
+                yMax = Math.max(yMax, vertexY);
+            }
+            const xRange = x1 - x0;
+            const yRange = yMax - yMin;
+            const padding = 0.15;
+
+            const view = {
+                xMin: x0 - xRange * padding,
+                xMax: x1 + xRange * padding,
+                yMin: yMin - yRange * padding,
+                yMax: yMax + yRange * padding
+            };
+            if (view.xMin === view.xMax) { view.xMin -= 1; view.xMax += 1; }
+            if (view.yMin === view.yMax) { view.yMin -= 1; view.yMax += 1; }
+
+            const mapToCanvas = (x, y) => {
+                const px = ((x - view.xMin) / (view.xMax - view.xMin)) * rect.width;
+                const py = rect.height - ((y - view.yMin) / (view.yMax - view.yMin)) * rect.height;
+                return { x: px, y: py };
+            };
+
+            ctx.clearRect(0, 0, rect.width, rect.height);
+            
+            // DRAWING ORDER: Grid -> Parabola -> Attractor
+            drawGridAndAxes(ctx, view, mapToCanvas);
+
+            ctx.beginPath();
+            ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--parabola-color');
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            const steps = 200;
+            for (let i = 0; i <= steps; i++) {
+                const x = x0 + (x1 - x0) * (i / steps);
+                const p = mapToCanvas(x, parabola(x));
+                if (i === 0) ctx.moveTo(p.x, p.y);
+                else ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+
+            let currentPoint = { x: x0, y: parabola(x0) };
+            const f1Color = 'rgba(40, 167, 69, 0.7)';
+            const f2Color = 'rgba(220, 53, 69, 0.7)';
+            
+            for (let i = 0; i < NUM_POINTS; i++) {
+                const choice = Math.random() < 0.5 ? f1 : f2;
+                const nextX = choice.M[0][0] * currentPoint.x + choice.M[0][1] * currentPoint.y + choice.t[0];
+                const nextY = choice.M[1][0] * currentPoint.x + choice.M[1][1] * currentPoint.y + choice.t[1];
+                currentPoint = { x: nextX, y: nextY };
+                
+                if (i > 50) {
+                    const p = mapToCanvas(currentPoint.x, currentPoint.y);
+                    ctx.fillStyle = (choice === f1) ? f1Color : f2Color;
+                    ctx.fillRect(p.x, p.y, 1.5, 1.5);
+                }
+            }
+        }
+    </script>
+
+</body>
+</html>
