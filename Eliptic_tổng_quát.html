@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mặt bậc hai và IFS</title>
+    
+    <script>
+        MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']]
+          },
+          svg: {
+            fontCache: 'global'
+          }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --panel-bg: #ffffff;
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+            --f1-color: #28a745;
+            --f2-color: #dc3545;
+            --shadow-color: rgba(0, 0, 0, 0.07);
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background-color: var(--bg-color); 
+            color: var(--text-color); 
+            margin: 0; 
+            padding: 2em; 
+        }
+        .app-container { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 2em; 
+            height: calc(100vh - 4em); 
+            max-width: 1800px; 
+            margin: 0 auto; 
+        }
+        .panel { 
+            background-color: var(--panel-bg); 
+            border-radius: 12px; 
+            box-shadow: 0 5px 20px var(--shadow-color); 
+            padding: 1.5em 2em; 
+            border: 1px solid var(--border-color); 
+            overflow-y: auto; 
+        }
+        h1, h2, h3 { 
+            color: var(--primary-color); 
+            border-bottom: 2px solid var(--border-color); 
+            padding-bottom: 0.5em; 
+            margin: 0 0 1.5em 0; 
+        }
+        .slider-group { 
+            display: grid; 
+            grid-template-columns: 40px 1fr 60px; 
+            align-items: center; 
+            gap: 1em; 
+            margin-bottom: 1.5em; 
+        }
+        .slider-group label { 
+            font-weight: 600; 
+            font-size: 1.2em; 
+            color: var(--primary-color); 
+        }
+        .slider-group span { 
+            font-family: "Courier New", monospace; 
+            text-align: right; 
+            padding: 0.3em 0.5em; 
+            background-color: var(--bg-color); 
+            border-radius: 6px; 
+            border: 1px solid var(--border-color); 
+        }
+        input[type="range"] { 
+            width: 100%; 
+            height: 6px; 
+            background: #e9ecef; 
+            border-radius: 5px; 
+        }
+        .visualization { 
+            padding: 0; 
+            border: none; 
+        }
+        canvas { 
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+        }
+        .equation {
+            margin: 1em 0;
+            padding: 0.5em;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="panel controls-panel">
+            <h1>Mặt bậc hai và IFS</h1>
+            
+            <div class="slider-group">
+                <label for="sliderK">k:</label>
+                <input type="range" id="sliderK" min="-1" max="1" value="0.1" step="0.01">
+                <span id="valK">0.10</span>
+            </div>
+            <div class="slider-group">
+                <label for="sliderCx">cₓ:</label>
+                <input type="range" id="sliderCx" min="-5" max="5" value="0" step="0.1">
+                <span id="valCx">0.00</span>
+            </div>
+            <div class="slider-group">
+                <label for="sliderCy">cᵧ:</label>
+                <input type="range" id="sliderCy" min="-5" max="5" value="0" step="0.1">
+                <span id="valCy">0.00</span>
+            </div>
+            <div class="slider-group">
+                <label for="sliderCz">c₂:</label>
+                <input type="range" id="sliderCz" min="-5" max="5" value="0" step="0.1">
+                <span id="valCz">0.00</span>
+            </div>
+
+            <div id="equations">
+                <h2>Phương trình mặt</h2>
+                <div id="paraboloid-eq" class="equation"></div>
+                <h3>Hệ hàm co (IFS)</h3>
+                <div id="f1-eq" class="equation"></div>
+                <div id="f2-eq" class="equation"></div>
+            </div>
+        </div>
+        <div class="panel visualization">
+            <canvas id="renderer-canvas"></canvas>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let attractorPoints;
+        let axisLabels = [];
+        let axisArrows = [];
+
+        const NUM_POINTS = 50000;
+        const SETTLE_POINTS = 100;
+        const EPSILON = 1e-6;
+        const AXIS_LENGTH = 5;
+        const ARROW_SIZE = 0.5;
+        const LABEL_OFFSET = 0.5;
+
+        function init() {
+            // Khởi tạo scene, camera, renderer
+            scene = new THREE.Scene();
+            const canvas = document.getElementById('renderer-canvas');
+            const container = canvas.parentElement;
+            
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(3, 3, 5);
+            
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas, 
+                antialias: true 
+            });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setClearColor(0xf8f9fa);
+
+            // Điều khiển camera
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            // Tạo các điểm attractor
+            const pointsGeometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(NUM_POINTS * 3);
+            const colors = new Float32Array(NUM_POINTS * 3);
+            pointsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            pointsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const pointsMaterial = new THREE.PointsMaterial({ 
+                size: 0.03,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9
+            });
+            
+            attractorPoints = new THREE.Points(pointsGeometry, pointsMaterial);
+            scene.add(attractorPoints);
+
+            // Tạo hệ trục tọa độ với mũi tên và nhãn
+            createAxesSystem();
+
+            // Xử lý sự kiện
+            document.querySelectorAll('input[type="range"]').forEach(slider => {
+                slider.addEventListener('input', updateScene);
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+            
+            updateScene();
+            animate();
+        }
+
+        function createAxesSystem() {
+            // Màu sắc và tên các trục
+            const axesConfig = [
+                { color: 0xff0000, name: 'x' }, // Trục x - đỏ
+                { color: 0x00ff00, name: 'y' }, // Trục y - xanh lá
+                { color: 0x0000ff, name: 'z' }  // Trục z - xanh dương
+            ];
+
+            // Tạo các trục với mũi tên và nhãn
+            axesConfig.forEach((axis, index) => {
+                const direction = new THREE.Vector3();
+                direction.setComponent(index, 1);
+                
+                // Tạo mũi tên
+                const arrow = new THREE.ArrowHelper(
+                    direction,
+                    new THREE.Vector3(0, 0, 0),
+                    AXIS_LENGTH,
+                    axis.color,
+                    ARROW_SIZE
+                );
+                scene.add(arrow);
+                axisArrows.push(arrow);
+                
+                // Tạo nhãn cho trục
+                const labelPos = new THREE.Vector3();
+                labelPos.setComponent(index, AXIS_LENGTH + LABEL_OFFSET);
+                
+                const label = createAxisLabel(axis.name, axis.color);
+                label.position.copy(labelPos);
+                scene.add(label);
+                axisLabels.push(label);
+            });
+            
+            // Tạo nhãn 'O' tại gốc tọa độ
+            const originLabel = createAxisLabel('O', 0x000000);
+            originLabel.position.set(-0.3, -0.3, 0);
+            scene.add(originLabel);
+            axisLabels.push(originLabel);
+        }
+
+        function createAxisLabel(text, color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 64;
+            const context = canvas.getContext('2d');
+            
+            // Nền trong suốt
+            context.fillStyle = 'rgba(0, 0, 0, 0)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Vẽ text
+            context.font = 'Bold 24px Arial';
+            context.fillStyle = `rgb(${color >> 16}, ${(color >> 8) & 255}, ${color & 255})`;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width/2, canvas.height/2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ 
+                map: texture,
+                transparent: true
+            });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(0.8, 0.4, 1);
+            return sprite;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            // Cập nhật vị trí nhãn theo camera
+            updateLabelsPosition();
+            
+            renderer.render(scene, camera);
+        }
+
+        function updateLabelsPosition() {
+            if (axisLabels.length === 0) return;
+            
+            // Lấy hướng nhìn từ camera
+            const cameraDirection = new THREE.Vector3();
+            camera.getWorldDirection(cameraDirection);
+            
+            // Cập nhật vị trí các nhãn trục
+            for (let i = 0; i < 3; i++) {
+                const labelPos = new THREE.Vector3();
+                labelPos.setComponent(i, AXIS_LENGTH + LABEL_OFFSET);
+                
+                // Điều chỉnh để nhãn luôn hướng về camera
+                const offset = cameraDirection.clone().multiplyScalar(0.2);
+                axisLabels[i].position.copy(labelPos).add(offset);
+            }
+            
+            // Cập nhật nhãn gốc tọa độ
+            const originOffset = cameraDirection.clone().multiplyScalar(-0.2);
+            axisLabels[3].position.copy(originOffset);
+        }
+
+        function onWindowResize() {
+            const canvas = renderer.domElement;
+            const container = canvas.parentElement;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+        
+        function format(num) { 
+            const str = num.toFixed(2);
+            return str.endsWith('.00') ? str.slice(0, -3) : str.replace(/0$/, '');
+        }
+        
+        function formatSigned(num) { 
+            return num >= 0 ? `+ ${format(num)}` : `- ${format(Math.abs(num))}`; 
+        }
+        
+        function updateScene() {
+            // Lấy giá trị từ các slider
+            const k = parseFloat(document.getElementById('sliderK').value);
+            const cx = parseFloat(document.getElementById('sliderCx').value);
+            const cy = parseFloat(document.getElementById('sliderCy').value);
+            const cz = parseFloat(document.getElementById('sliderCz').value);
+            
+            // Cập nhật giá trị hiển thị
+            document.getElementById('valK').textContent = format(k);
+            document.getElementById('valCx').textContent = format(cx);
+            document.getElementById('valCy').textContent = format(cy);
+            document.getElementById('valCz').textContent = format(cz);
+            
+            // Tính các hệ số
+            const A = 2 - 8 * k;
+            const B = 1 - 4 * k;
+            const C = 4 * k;
+            const D = 2 * k;
+            const F = cz - C*cx - D*cy + A*cx*cx + B*cy*cy;
+            
+            // Tạo phương trình hiển thị
+            let equation = `z = `;
+            if (Math.abs(A) > EPSILON) equation += `${format(A)}x² `;
+            if (Math.abs(B) > EPSILON) equation += `${formatSigned(B)}y² `;
+            if (Math.abs(C) > EPSILON) equation += `${formatSigned(C)}x `;
+            if (Math.abs(D) > EPSILON) equation += `${formatSigned(D)}y `;
+            equation += `${formatSigned(F)}`;
+
+            // Hàm tính toán mặt
+            const surfaceFunc = (x, y) => A*x*x + B*y*y + C*x + D*y + F;
+
+            // Tính toán các phép biến đổi IFS
+            const l = 1 - 3 * k;
+            const c_vec = new THREE.Vector3(cx, cy, cz);
+            
+            const A1 = new THREE.Matrix4().set(
+                0, 0.5, 0, 0,
+                1, 0, 0, 0,
+                0, k, 0.5, 0,
+                0, 0, 0, 1
+            );
+            
+            const A2 = new THREE.Matrix4().set(
+                0, 0.5, 0, 0,
+                1, 0, 0, 0,
+                0, l, 0.5, 0,
+                0, 0, 0, 1
+            );
+            
+            const t1_c = new THREE.Vector3(0, 0, 0).add(c_vec).sub(c_vec.clone().applyMatrix4(A1));
+            const t2_c = new THREE.Vector3(0.5, 0, 0.5).add(c_vec).sub(c_vec.clone().applyMatrix4(A2));
+            
+            const f1 = (p) => p.clone().applyMatrix4(A1).add(t1_c);
+            const f2 = (p) => p.clone().applyMatrix4(A2).add(t2_c);
+            
+            const M_f1_c = new THREE.Matrix4().copy(A1).setPosition(t1_c);
+            const M_f2_c = new THREE.Matrix4().copy(A2).setPosition(t2_c);
+
+            // Cập nhật hiển thị
+            updateEquations(equation, M_f1_c, M_f2_c);
+            
+            // Chạy chaos game
+            runChaosGame(f1, f2, surfaceFunc);
+        }
+        
+        function updateEquations(equation, M_f1, M_f2) {
+            const eqDiv = document.getElementById('paraboloid-eq');
+            const f1Div = document.getElementById('f1-eq');
+            const f2Div = document.getElementById('f2-eq');
+            
+            // Hiển thị phương trình mặt
+            eqDiv.innerHTML = `\\[ ${equation} \\]`;
+
+            // Hiển thị ma trận IFS
+            const formatMatrix = (m) => {
+                return `\\begin{pmatrix} 
+                    ${format(m[0])} & ${format(m[4])} & ${format(m[8])} & ${format(m[12])} \\\\
+                    ${format(m[1])} & ${format(m[5])} & ${format(m[9])} & ${format(m[13])} \\\\
+                    ${format(m[2])} & ${format(m[6])} & ${format(m[10])} & ${format(m[14])} \\\\ 
+                    0 & 0 & 0 & 1
+                \\end{pmatrix}`;
+            };
+            
+            f1Div.innerHTML = `\\[ M_{f_1} = ${formatMatrix(M_f1.elements)} \\]`;
+            f2Div.innerHTML = `\\[ M_{f_2} = ${formatMatrix(M_f2.elements)} \\]`;
+
+            // Render lại MathJax
+            setTimeout(() => {
+                if (window.MathJax) {
+                    MathJax.typesetPromise([eqDiv, f1Div, f2Div]).catch(err => {
+                        console.error('MathJax typesetting error:', err);
+                    });
+                }
+            }, 0);
+        }
+        
+        function runChaosGame(f1, f2, surfaceFunc) {
+            const positions = attractorPoints.geometry.attributes.position.array;
+            const colors = attractorPoints.geometry.attributes.color.array;
+
+            const color1 = new THREE.Color(0x28a745); // Màu cho f1
+            const color2 = new THREE.Color(0xdc3545); // Màu cho f2
+
+            // Khởi tạo điểm bắt đầu ngẫu nhiên trên bề mặt
+            let p = new THREE.Vector3(
+                (Math.random() - 0.5) * 4,
+                (Math.random() - 0.5) * 4,
+                0
+            );
+            p.z = surfaceFunc(p.x, p.y);
+
+            for (let i = 0; i < NUM_POINTS + SETTLE_POINTS; i++) {
+                const choice = Math.random() < 0.5 ? f1 : f2;
+                p = choice(p);
+                
+                if (i >= SETTLE_POINTS) {
+                    const idx = (i - SETTLE_POINTS) * 3;
+                    positions[idx] = p.x;
+                    positions[idx + 1] = p.y;
+                    positions[idx + 2] = p.z;
+                    
+                    if (choice === f1) {
+                        colors[idx] = color1.r;
+                        colors[idx + 1] = color1.g;
+                        colors[idx + 2] = color1.b;
+                    } else {
+                        colors[idx] = color2.r;
+                        colors[idx + 1] = color2.g;
+                        colors[idx + 2] = color2.b;
+                    }
+                }
+            }
+            
+            attractorPoints.geometry.attributes.position.needsUpdate = true;
+            attractorPoints.geometry.attributes.color.needsUpdate = true;
+        }
+
+        // Khởi chạy ứng dụng khi DOM đã sẵn sàng
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
