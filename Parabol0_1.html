@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor - Tương tác Pan & Zoom</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; color: #1c1e21; }
+        h1 { width: 100%; text-align: center; margin-bottom: 20px; }
+        #app-container { display: flex; gap: 30px; align-items: flex-start; }
+        #left-panel { flex: 0 0 420px; display: flex; flex-direction: column; gap: 20px; }
+        #right-panel { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        #controls-container, #info-container { background-color: #fff; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .slider-group { display: flex; flex-direction: column; margin-bottom: 15px; }
+        .slider-group label { margin-bottom: 5px; font-weight: 500; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        #canvas-container { border: 1px solid #ccc; box-shadow: 0 4px 12px rgba(0,0,0,0.1); background-color: #fff; touch-action: none; cursor: grab; }
+        #canvas-container:active { cursor: grabbing; }
+        .formula-display { padding: 10px; font-size: 1.1em; text-align: center; border-top: 1px solid #e0e0e0; margin-top: 15px; }
+        .formula-display:first-of-type { border-top: none; margin-top: 5px; }
+        #reset-view-btn {
+            padding: 8px 16px; font-size: 14px; font-weight: 500; color: #fff; background-color: #007bff;
+            border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.2s;
+        }
+        #reset-view-btn:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Mô Phỏng Attractor - Tương tác Pan & Zoom</h1>
+    <div id="app-container">
+        <div id="left-panel">
+            <div id="controls-container">
+                <h2>Bảng Điều Khiển</h2>
+                <div class="slider-group"><label for="lambda">λ: <span id="lambda-value"></span></label><input type="range" id="lambda" min="0.01" max="0.99" value="0.5" step="0.01"></div>
+                <div class="slider-group"><label for="a">a: <span id="a-value"></span></label><input type="range" id="a" min="-10" max="10" value="1" step="0.1"></div>
+                <div class="slider-group"><label for="b">b: <span id="b-value"></span></label><input type="range" id="b" min="-5" max="5" value="0" step="0.1"></div>
+                <div class="slider-group"><label for="c">c: <span id="c-value"></span></label><input type="range" id="c" min="-5" max="5" value="0" step="0.1"></div>
+                <div class="slider-group"><label for="iterations">Số điểm (log): <span id="iterations-value"></span></label><input type="range" id="iterations" min="3" max="5.5" value="4.7" step="0.01"></div>
+            </div>
+            <div id="info-container">
+                <h3>Phép Biến Đổi Affine</h3>
+                <div id="formula1" class="formula-display"></div>
+                <div id="formula2" class="formula-display"></div>
+            </div>
+        </div>
+        <div id="right-panel">
+            <div id="canvas-container"><canvas id="attractorCanvas" width="600" height="600"></canvas></div>
+            <button id="reset-view-btn">Reset Khung Nhìn</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('attractorCanvas');
+        const ctx = canvas.getContext('2d');
+        const sliders = { /* ... */ };
+        
+        // --- Trạng thái khung nhìn (Viewport State) ---
+        const STATIC_BOUNDS = { xMin: -0.5, xMax: 1.5, yMin: -2.0, yMax: 2.0 };
+        let mathBounds = { ...STATIC_BOUNDS }; // Khung nhìn hiện tại, có thể thay đổi
+        let isPanning = false;
+        let lastMousePos = { x: 0, y: 0 };
+        let currentParams = {};
+
+        // --- Hàm chuyển đổi tọa độ ---
+        function transformCoordinates(mx, my) {
+            const xRange = mathBounds.xMax - mathBounds.xMin;
+            const yRange = mathBounds.yMax - mathBounds.yMin;
+            const canvasX = (mx - mathBounds.xMin) / xRange * canvas.width;
+            const canvasY = canvas.height - ((my - mathBounds.yMin) / yRange * canvas.height);
+            return { x: canvasX, y: canvasY };
+        }
+
+        // --- Hàm vẽ ---
+        function drawGrid() {
+            ctx.strokeStyle = "#e0e0e0"; ctx.lineWidth = 1;
+            ctx.font = "11px Arial"; ctx.fillStyle = "#555";
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+
+            // Tính bước nhảy lưới "đẹp"
+            const xRange = mathBounds.xMax - mathBounds.xMin;
+            const powerOf10 = Math.pow(10, Math.floor(Math.log10(xRange)));
+            const step = xRange / powerOf10 > 5 ? powerOf10 : (xRange / powerOf10 > 2 ? 0.5 * powerOf10 : 0.2 * powerOf10);
+
+            // Vẽ lưới
+            for (let i = Math.floor(mathBounds.xMin / step) * step; i < mathBounds.xMax; i += step) {
+                const { x } = transformCoordinates(i, 0);
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                ctx.fillText(i.toFixed(2), x, transformCoordinates(0, mathBounds.yMin).y - 10);
+            }
+            for (let i = Math.floor(mathBounds.yMin / step) * step; i < mathBounds.yMax; i += step) {
+                const { y } = transformCoordinates(0, i);
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                ctx.fillText(i.toFixed(2), transformCoordinates(mathBounds.xMin, 0).x - 25, y);
+            }
+        }
+
+        function drawAttractor(params) {
+            let x = Math.random(), y = Math.random();
+            for (let i = 0; i < 20; i++) { [x, y] = (Math.random() < 0.5) ? f1(x, y, params) : f2(x, y, params); }
+            
+            for (let i = 0; i < params.numPoints; i++) {
+                let nextX, nextY, color;
+                if (Math.random() < 0.5) { [nextX, nextY] = f1(x, y, params); color = 'rgba(40,167,69,0.8)'; } 
+                else { [nextX, nextY] = f2(x, y, params); color = 'rgba(220,53,69,0.8)'; }
+                x = nextX; y = nextY;
+                const { x: cx, y: cy } = transformCoordinates(x, y);
+                if (cx >= -1 && cx <= canvas.width+1 && cy >= -1 && cy <= canvas.height+1) {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(cx, cy, 2, 2);
+                }
+            }
+        }
+        
+        // --- Hàm điều khiển chính ---
+        function drawScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+            drawAttractor(currentParams);
+        }
+
+        function updateAndRedraw() {
+            currentParams = {
+                lambda: parseFloat(sliders.lambda.value), a: parseFloat(sliders.a.value),
+                b: parseFloat(sliders.b.value), c: parseFloat(sliders.c.value),
+                numPoints: Math.floor(Math.pow(10, parseFloat(sliders.iterations.value)))
+            };
+            updateUI(currentParams);
+            drawScene();
+        }
+
+        // --- Cập nhật UI ---
+        function updateUI(p) {
+            document.getElementById('lambda-value').textContent = p.lambda.toFixed(2);
+            document.getElementById('a-value').textContent = p.a.toFixed(1);
+            document.getElementById('b-value').textContent = p.b.toFixed(1);
+            document.getElementById('c-value').textContent = p.c.toFixed(1);
+            document.getElementById('iterations-value').textContent = p.numPoints;
+            updateMatrixFormulas(p);
+        }
+        function updateMatrixFormulas(p) { /* ... Giữ nguyên như phiên bản trước ... */ }
+        function f1(x, y, p) { /* ... Giữ nguyên ... */ }
+        function f2(x, y, p) { /* ... Giữ nguyên ... */ }
+        // (Dán các hàm updateMatrixFormulas, f1, f2 từ phiên bản trước vào đây)
+        function updateMatrixFormulas(p) {
+            const f = (n) => n.toFixed(2);
+            const l = p.lambda, l2 = l*l, one_minus_l = 1 - l;
+            const m1_21 = p.b * l * one_minus_l;
+            const t1_2 = p.c * (1 - l2);
+            const f1_latex = `\\begin{pmatrix} x' \\\\ y' \\end{pmatrix} = \\begin{pmatrix} ${f(l)} & 0 \\\\ ${f(m1_21)} & ${f(l2)} \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\begin{pmatrix} 0 \\\\ ${f(t1_2)} \\end{pmatrix}`;
+            const m2_21 = l * one_minus_l * (2*p.a + p.b);
+            const t2_1 = one_minus_l;
+            const t2_2 = p.a*one_minus_l*one_minus_l + p.b*one_minus_l + p.c*(1-l2);
+            const f2_latex = `\\begin{pmatrix} x' \\\\ y' \\end{pmatrix} = \\begin{pmatrix} ${f(l)} & 0 \\\\ ${f(m2_21)} & ${f(l2)} \\end{pmatrix} \\begin{pmatrix} x \\\\ y \\end{pmatrix} + \\begin{pmatrix} ${f(t2_1)} \\\\ ${f(t2_2)} \\end{pmatrix}`;
+            document.getElementById('formula1').innerHTML = `\\(f_1:\\) $$${f1_latex}$$`;
+            document.getElementById('formula2').innerHTML = `\\(f_2:\\) $$${f2_latex}$$`;
+            MathJax.typesetPromise();
+        }
+        function f1(x, y, p) { const l = p.lambda, l2 = l*l; const nextX = l * x; const nextY = p.b * l * (1-l) * x + l2 * y + p.c * (1-l2); return [nextX, nextY]; }
+        function f2(x, y, p) { const l = p.lambda, l2 = l*l; const one_minus_l = 1 - l; const nextX = l * x + one_minus_l; const nextY = l*one_minus_l*(2*p.a+p.b)*x + l2*y + p.a*one_minus_l*one_minus_l + p.b*one_minus_l + p.c*(1-l2); return [nextX, nextY]; }
+
+
+        // --- Event Handlers cho Pan & Zoom ---
+        canvas.addEventListener('mousedown', (e) => {
+            isPanning = true;
+            lastMousePos = { x: e.offsetX, y: e.offsetY };
+        });
+        window.addEventListener('mouseup', () => { isPanning = false; });
+        window.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            const dx = e.offsetX - lastMousePos.x;
+            const dy = e.offsetY - lastMousePos.y;
+            lastMousePos = { x: e.offsetX, y: e.offsetY };
+
+            const xRange = mathBounds.xMax - mathBounds.xMin;
+            const yRange = mathBounds.yMax - mathBounds.yMin;
+            mathBounds.xMin -= dx * (xRange / canvas.width);
+            mathBounds.xMax -= dx * (xRange / canvas.width);
+            mathBounds.yMin += dy * (yRange / canvas.height);
+            mathBounds.yMax += dy * (yRange / canvas.height);
+            drawScene();
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 0.9 : 1.1; // 0.9 to zoom in, 1.1 to zoom out
+            const mouseX = e.offsetX;
+            const mouseY = e.offsetY;
+
+            // Convert mouse screen coords to math coords
+            const xRange = mathBounds.xMax - mathBounds.xMin;
+            const yRange = mathBounds.yMax - mathBounds.yMin;
+            const mouseMathX = mathBounds.xMin + mouseX * (xRange / canvas.width);
+            const mouseMathY = mathBounds.yMin + (canvas.height - mouseY) * (yRange / canvas.height);
+
+            // Zoom the bounds towards the mouse point
+            mathBounds.xMin = mouseMathX + (mathBounds.xMin - mouseMathX) * zoomFactor;
+            mathBounds.xMax = mouseMathX + (mathBounds.xMax - mouseMathX) * zoomFactor;
+            mathBounds.yMin = mouseMathY + (mathBounds.yMin - mouseMathY) * zoomFactor;
+            mathBounds.yMax = mouseMathY + (mathBounds.yMax - mouseMathY) * zoomFactor;
+            drawScene();
+        });
+
+        document.getElementById('reset-view-btn').addEventListener('click', () => {
+            mathBounds = { ...STATIC_BOUNDS };
+            drawScene();
+        });
+
+        // --- Khởi tạo ---
+        const sliderIds = ['lambda', 'a', 'b', 'c', 'iterations'];
+        sliderIds.forEach(id => {
+            sliders[id] = document.getElementById(id);
+            sliders[id].addEventListener('input', updateAndRedraw);
+        });
+        window.onload = updateAndRedraw;
+    </script>
+</body>
+</html>
