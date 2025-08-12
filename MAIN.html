@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>📖 MAIN - Danh sách Fractal</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 20px;
+      background-color: #f7f9fc;
+      color: #333;
+    }
+    h1 {
+      color: #2c3e50;
+      text-align: center;
+      border-bottom: 3px solid #3498db;
+      padding-bottom: 10px;
+    }
+    #fileList {
+      max-width: 800px;
+      margin: 30px auto;
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .file-item {
+      margin: 10px 0;
+    }
+    .file-item a {
+      display: block;
+      padding: 12px 15px;
+      background: #ecf4ff;
+      color: #2980b9;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 16px;
+      transition: all 0.3s;
+    }
+    .file-item a:hover {
+      background: #d4e7ff;
+      transform: translateX(5px);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .loading {
+      text-align: center;
+      color: #7f8c8d;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <h1>📖 MAIN - Danh sách Fractal</h1>
+  <div id="fileList">
+    <p class="loading">Đang tải danh sách bài học...</p>
+  </div>
+
+  <script>
+    async function loadFiles() {
+      try {
+        const response = await fetch('danh-sach.json?' + new Date().getTime()); // Thêm cache buster
+        if (!response.ok) throw new Error("Không tìm thấy danh sách bài học (danh-sach.json)");
+
+        const files = await response.json();
+        const listContainer = document.getElementById("fileList");
+        listContainer.innerHTML = "";
+
+        if (files.length === 0) {
+          listContainer.innerHTML = "<p>Không có bài học nào.</p>";
+          return;
+        }
+
+        files.forEach(file => {
+          const div = document.createElement("div");
+          div.className = "file-item";
+          const a = document.createElement("a");
+          a.href = file.url;
+          a.target = "_blank"; // Mở trong tab mới
+          a.textContent = `📄 ${file.name}`;
+          div.appendChild(a);
+          listContainer.appendChild(div);
+        });
+      } catch (error) {
+        console.error("Lỗi tải danh sách:", error);
+        document.getElementById("fileList").innerHTML = 
+          `<p style="color:red;">Lỗi: ${error.message}</p>`;
+      }
+    }
+
+    // Tải danh sách khi trang mở
+    loadFiles();
+
+    // Tự động làm mới mỗi 2 phút
+    setInterval(loadFiles, 120000);
+  </script>
+</body>
+</html>
