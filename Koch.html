@@ -51,194 +51,141 @@
 </head>
 <body>
     <h1>Advanced Weighted Koch IFS Attractor</h1>
-
     <div id="controls">
         <label for="wASlider">Trọng số SA:</label>
         <input type="range" id="wASlider" min="0.05" max="0.45" step="0.01" value="0.2">
         <span id="wAValue">0.20</span>
-
         <label for="wBSlider">Trọng số SM (trên đường thẳng):</label>
         <input type="range" id="wBSlider" min="0.2" max="0.8" step="0.01" value="0.5">
         <span id="wBValue">0.50</span>
-
         <label for="wCSlider">Trọng số SC:</label>
         <input type="range" id="wCSlider" min="0.55" max="0.95" step="0.01" value="0.8">
         <span id="wCValue">0.80</span>
-
         <label for="alphaSlider">Chiều cao Apex (alpha):</label>
         <input type="range" id="alphaSlider" min="0" max="2" step="0.01" value="0.8">
         <span id="alphaValue">0.80</span>
-
         <label for="betaSlider">Góc Apex (beta):</label>
         <input type="range" id="betaSlider" min="-180" max="180" step="1" value="0">
         <span id="betaValue">0°</span>
-
         <label for="flipApexCheckbox">Lật hướng Apex:</label>
         <input type="checkbox" id="flipApexCheckbox">
         <span></span>
     </div>
-
     <script>
         let wASlider, wBSlider, wCSlider, alphaSlider, betaSlider, flipApexCheckbox;
         let wAValueSpan, wBValueSpan, wCValueSpan, alphaValueSpan, betaValueSpan;
-
         let wA, wB, wC, alpha, beta, flipApex;
         let currentPoint;
-        let fns = []; // Mảng các hàm biến đổi IFS
-        const numIterations = 50000; // Số điểm để vẽ attractor (tăng lên để rõ hơn)
+        let ifs = []; // mỗi phần tử: {fn, prob}
+        const numIterations = 80000;
 
-        // Hàm P5.js setup()
         function setup() {
             let canvas = createCanvas(600, 400);
             canvas.parent(document.body);
-
             wASlider = select('#wASlider');
             wBSlider = select('#wBSlider');
             wCSlider = select('#wCSlider');
             alphaSlider = select('#alphaSlider');
             betaSlider = select('#betaSlider');
             flipApexCheckbox = select('#flipApexCheckbox');
-
             wAValueSpan = select('#wAValue');
             wBValueSpan = select('#wBValue');
             wCValueSpan = select('#wCValue');
             alphaValueSpan = select('#alphaValue');
             betaValueSpan = select('#betaValue');
-
             wASlider.input(updateParams);
             wBSlider.input(updateParams);
             wCSlider.input(updateParams);
             alphaSlider.input(updateParams);
             betaSlider.input(updateParams);
             flipApexCheckbox.changed(updateParams);
-
-            updateParams(); 
-
-            currentPoint = createVector(random(width), random(height));
+            updateParams();
+            currentPoint = createVector(0.5, 0.1);
             background(248);
-            stroke(0, 50); 
-            strokeWeight(1);
-            noLoop(); 
+            stroke(0, 80);
+            strokeWeight(0.7);
+            noLoop();
         }
 
-        // Cập nhật các tham số từ thanh trượt
         function updateParams() {
             wA = parseFloat(wASlider.value());
             wB = parseFloat(wBSlider.value());
             wC = parseFloat(wCSlider.value());
             alpha = parseFloat(alphaSlider.value());
-            beta = radians(parseFloat(betaSlider.value())); // Chuyển đổi độ sang radian
+            beta = radians(parseFloat(betaSlider.value()));
             flipApex = flipApexCheckbox.checked();
 
-            // Đảm bảo wA < wB < wC
             if (wA >= wB) { wB = wA + 0.01; wBSlider.value(wB); }
             if (wB >= wC) { wC = wB + 0.01; wCSlider.value(wC); }
-            // Cập nhật lại wA nếu wB đã bị đẩy lên quá gần wC
-            if (wA >= wB) { wA = wB - 0.01; wASlider.value(wA); } // Đảm bảo khoảng cách tối thiểu
-            if (wA < 0.05) { wA = 0.05; wASlider.value(wA); } // Giới hạn dưới
+            if (wA >= wB) { wA = wB - 0.01; wASlider.value(wA); }
+            if (wA < 0.05) { wA = 0.05; wASlider.value(wA); }
 
             wAValueSpan.html(wA.toFixed(2));
             wBValueSpan.html(wB.toFixed(2));
             wCValueSpan.html(wC.toFixed(2));
             alphaValueSpan.html(alpha.toFixed(2));
             betaValueSpan.html(degrees(beta).toFixed(0) + "°");
-            
+
             recalculateIFS();
             redraw();
         }
 
-        // Tính toán lại các hàm biến đổi IFS dựa trên tham số mới
         function recalculateIFS() {
-            fns = [];
-            
-            // Giả sử đoạn thẳng ban đầu là từ P_start_norm=(0,0) đến P_end_norm=(1,0)
-            const p_start_norm = createVector(0, 0);
-            const p_end_norm = createVector(1, 0);
+            ifs = [];
+            const start = createVector(0, 0);
+            const end   = createVector(1, 0);
 
-            // 1. Xác định các điểm chia trên đoạn P_start_norm đến P_end_norm
-            const sA_norm = p5.Vector.lerp(p_start_norm, p_end_norm, wA); // Linear interpolation
-            const sB_norm = p5.Vector.lerp(p_start_norm, p_end_norm, wB);
-            const sC_norm = p5.Vector.lerp(p_start_norm, p_end_norm, wC);
+            const sA = p5.Vector.lerp(start, end, wA);
+            const sC = p5.Vector.lerp(start, end, wC);
 
-            // 2. Xác định điểm Apex (SM)
-            // Đoạn cơ sở để tạo apex là SA -> SC
-            const base_vector_for_apex = p5.Vector.sub(sC_norm, sA_norm);
-            const base_length_for_apex = base_vector_for_apex.mag();
+            const base = p5.Vector.sub(sC, sA);
+            const mid  = p5.Vector.lerp(sA, sC, 0.5);
+            let up = createVector(0, 1);
+            up.rotate(base.heading() + HALF_PI + beta);
+            if (flipApex) up.mult(-1);
+            up.setMag(alpha * (sqrt(3)/2) * base.mag());
+            const sM = p5.Vector.add(mid, up);
 
-            // Điểm trung tâm của đoạn SA -> SC (theo trục X ban đầu)
-            const mid_point_on_line_for_apex = p5.Vector.add(sA_norm, p5.Vector.mult(base_vector_for_apex, 0.5));
-            
-            // Vector hướng lên vuông góc với đoạn thẳng ban đầu (0,1)
-            let apex_direction_base = createVector(0, 1);
-            
-            // Điều chỉnh vector hướng của apex dựa trên beta
-            // Xoay vector hướng lên base_vector_for_apex.heading() + HALF_PI
-            // Sau đó xoay thêm beta
-            apex_direction_base.rotate(base_vector_for_apex.heading() + HALF_PI + beta);
-            
-            if (flipApex) {
-                apex_direction_base.mult(-1); // Lật hướng
-            }
-
-            // Độ dài của vector hướng apex
-            apex_direction_base.setMag(alpha * theoreticalKochHeight(base_length_for_apex)); // Sử dụng chiều cao Koch tiêu chuẩn làm baseline
-            
-            const sM_norm = p5.Vector.add(mid_point_on_line_for_apex, apex_direction_base);
-
-            // Bây giờ định nghĩa 4 hàm biến đổi (map from [0,0]-[1,0] to the new segments)
-
-            // Hàm trợ giúp để tạo một phép biến đổi IFS
-            function createIFSFunction(start_point_norm, end_point_norm) {
-                return function(p) {
-                    const segment_vector = p5.Vector.sub(end_point_norm, start_point_norm);
-                    const scale_factor = segment_vector.mag();
-                    const rotation_angle = segment_vector.heading();
-
-                    let new_p = createVector(p.x, p.y); // Sử dụng p.x cho độ dài, p.y cho độ dày nếu cần
-                    new_p.x *= scale_factor;
-                    new_p.y *= scale_factor; // Co cả y nếu fractal có "bề dày"
-
-                    new_p.rotate(rotation_angle);
-                    new_p.add(start_point_norm);
-                    return new_p;
+            function add(p1, p2) {
+                const v = p5.Vector.sub(p2, p1);
+                const len = v.mag();
+                const ang = v.heading();
+                const fn = (p) => {
+                    let q = p.copy();
+                    q.sub(start);
+                    q.rotate(-ang);
+                    q.mult(len);
+                    q.rotate(ang);
+                    q.add(p1);
+                    return q;
                 };
+                ifs.push({fn, prob: len});
             }
 
-            // Chiều cao lý thuyết của tam giác đều nếu base_length là đáy
-            function theoreticalKochHeight(base_length) {
-                return (sqrt(3) / 2) * base_length;
-            }
-            
-            // 1. Đoạn P_start -> SA
-            fns.push(createIFSFunction(p_start_norm, sA_norm));
-            // 2. Đoạn SA -> SM
-            fns.push(createIFSFunction(sA_norm, sM_norm));
-            // 3. Đoạn SM -> SC
-            fns.push(createIFSFunction(sM_norm, sC_norm));
-            // 4. Đoạn SC -> P_end
-            fns.push(createIFSFunction(sC_norm, p_end_norm));
+            add(start, sA);  // hàm 1
+            add(sA,    sM);  // hàm 2
+            add(sM,    sC);  // hàm 3
+            add(sC,    end); // hàm 4
+
+            const total = ifs.reduce((s,o)=>s+o.prob, 0);
+            ifs.forEach(o=>o.prob /= total);
         }
 
-        // Hàm P5.js draw()
         function draw() {
             background(248);
             translate(0, height);
             scale(1, -1);
 
-            let displayPoint = currentPoint.copy(); // Dùng bản sao để không làm thay đổi currentPoint gốc
-            let canvasX = displayPoint.x * width;
-            let canvasY = displayPoint.y * height;
-            point(canvasX, canvasY);
-
             for (let i = 0; i < numIterations; i++) {
-                let fn_index = floor(random(fns.length));
-                let chosen_fn = fns[fn_index];
-
-                currentPoint = chosen_fn(currentPoint);
-
-                canvasX = currentPoint.x * width;
-                canvasY = currentPoint.y * height;
-                point(canvasX, canvasY);
+                let r = random();
+                let cum = 0;
+                let chosen;
+                for (let o of ifs) {
+                    cum += o.prob;
+                    if (r <= cum) { chosen = o; break; }
+                }
+                currentPoint = chosen.fn(currentPoint);
+                point(currentPoint.x * width, currentPoint.y * height);
             }
         }
     </script>
