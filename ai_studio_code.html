@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Weighted Koch IFS</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 { color: #333; }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .canvas-wrapper {
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+
+        .controls {
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .value-display {
+            font-family: monospace;
+            color: #007bff;
+            float: right;
+        }
+
+        .stats {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 0.85em;
+            font-family: monospace;
+        }
+        
+        .stats p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+    <h1>Koch IFS Cải Tiến</h1>
+
+    <div class="container">
+        <div class="canvas-wrapper">
+            <canvas id="fractalCanvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>wa (Đoạn đầu): <span id="val_wa" class="value-display">0.20</span></label>
+                <input type="range" id="wa" min="0.01" max="0.99" step="0.01" value="0.2">
+            </div>
+
+            <div class="control-group">
+                <label>wc (Đoạn cuối): <span id="val_wc" class="value-display">0.80</span></label>
+                <input type="range" id="wc" min="0.01" max="0.99" step="0.01" value="0.8">
+            </div>
+
+            <div class="control-group">
+                <label>alpha (Chiều cao đỉnh): <span id="val_alpha" class="value-display">0.80</span></label>
+                <input type="range" id="alpha" min="-2.0" max="2.0" step="0.01" value="0.8">
+            </div>
+
+            <div class="control-group">
+                <label>beta (Góc xoay đỉnh - độ): <span id="val_beta" class="value-display">0</span></label>
+                <input type="range" id="beta" min="-180" max="180" step="1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label>Số lượng điểm (Iterations): <span id="val_iter" class="value-display">100000</span></label>
+                <input type="range" id="iterations" min="10000" max="500000" step="10000" value="100000">
+            </div>
+
+            <div class="stats" id="statsOutput">
+                <!-- Thông số tính toán sẽ hiện ở đây -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cấu hình Canvas
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Tắt alpha để tăng tốc
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Các tham số mặc định
+        let params = {
+            wa: 0.2,
+            wc: 0.8,
+            alpha: 0.8,
+            beta: 0,
+            iterations: 100000
+        };
+
+        // Màu sắc tương ứng f1, f2, f3, f4 (RGB)
+        // f1: green, f2: red (#FF0000), f3: purple, f4: orange
+        const colors = [
+            {r: 0, g: 128, b: 0},       // f1
+            {r: 255, g: 0, b: 0},       // f2
+            {r: 128, g: 0, b: 128},     // f3
+            {r: 255, g: 165, b: 0}      // f4
+        ];
+
+        // Hàm lấy transform matrix (tương đương _get_transform_matrix trong Python)
+        function getTransform(p1, p2) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            // Matrix [[dx, -dy], [dy, dx]]
+            // Translation [p1.x, p1.y]
+            return {
+                a: dx, b: -dy,
+                c: dy, d: dx,
+                e: p1.x, f: p1.y,
+                det: dx*dx + dy*dy // Determinant (diện tích tỉ lệ)
+            };
+        }
+
+        // Hàm tính toán hình học và render
+        function renderFractal() {
+            // 1. Tính toán các điểm mốc
+            const radBeta = params.beta * (Math.PI / 180);
+            
+            const p_start = { x: 0.0, y: 0.0 };
+            const p_end   = { x: 1.0, y: 0.0 };
+            const s_a     = { x: params.wa, y: 0.0 };
+            const s_c     = { x: params.wc, y: 0.0 };
+
+            // Tính đỉnh S_M
+            const base_length = params.wc - params.wa;
+            const h_std = base_length * (Math.sqrt(3) / 2);
+            const h_actual = params.alpha * h_std;
+            
+            const mid_x = params.wa + base_length / 2;
+            // Python: sm_x = mid_x - h_actual * math.sin(self.beta)
+            // Python: sm_y = h_actual * math.cos(self.beta)
+            const sm_x = mid_x - h_actual * Math.sin(radBeta);
+            const sm_y = h_actual * Math.cos(radBeta);
+            const s_m = { x: sm_x, y: sm_y };
+
+            // 2. Tạo 4 phép biến đổi
+            const transforms = [];
+            transforms.push(getTransform(p_start, s_a)); // f1
+            transforms.push(getTransform(s_a, s_m));     // f2
+            transforms.push(getTransform(s_m, s_c));     // f3
+            transforms.push(getTransform(s_c, p_end));   // f4
+
+            // 3. Tính xác suất (Probabilities)
+            let totalDet = 0;
+            const dets = transforms.map(t => Math.abs(t.det));
+            totalDet = dets.reduce((a, b) => a + b, 0);
+            
+            const probs = dets.map(d => d / totalDet);
+
+            // Cập nhật UI Stats
+            updateStats(probs, dets);
+
+            // 4. Chaos Game Loop
+            // Xóa canvas bằng cách điền màu trắng
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, width, height);
+
+            // Lấy dữ liệu pixel để thao tác trực tiếp (nhanh hơn fillRect từng điểm)
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const data = imgData.data;
+
+            // Điểm bắt đầu ngẫu nhiên
+            let cx = Math.random();
+            let cy = Math.random();
+
+            // Burn-in (chạy bỏ 20 bước đầu để điểm hội tụ về fractal)
+            for (let i = 0; i < 20; i++) {
+                const idx = weightedRandom(probs);
+                const t = transforms[idx];
+                const nx = t.a * cx + t.b * cy + t.e;
+                const ny = t.c * cx + t.d * cy + t.f;
+                cx = nx; cy = ny;
+            }
+
+            // Cấu hình vùng vẽ (Zoom/Pan)
+            // Fractal gốc nằm trong khoảng x[0,1]. Ta map nó vào giữa Canvas.
+            const scale = width * 0.8; 
+            const offsetX = width * 0.1;
+            const offsetY = height * 0.8; // Lật trục Y vì Canvas Y tăng xuống dưới
+
+            for (let i = 0; i < params.iterations; i++) {
+                const idx = weightedRandom(probs);
+                const t = transforms[idx];
+                
+                // Áp dụng affine transform: M @ point + translation
+                const nx = t.a * cx + t.b * cy + t.e;
+                const ny = t.c * cx + t.d * cy + t.f;
+                cx = nx; cy = ny;
+
+                // Map sang tọa độ màn hình
+                // Y của canvas ngược với Y toán học
+                const screenX = Math.floor(cx * scale + offsetX);
+                const screenY = Math.floor(offsetY - cy * scale);
+
+                if (screenX >= 0 && screenX < width && screenY >= 0 && screenY < height) {
+                    const pixelIndex = (screenY * width + screenX) * 4;
+                    const c = colors[idx];
+                    
+                    // Tô màu pixel (đơn giản ghi đè, không alpha blending phức tạp)
+                    data[pixelIndex] = c.r;     // R
+                    data[pixelIndex + 1] = c.g; // G
+                    data[pixelIndex + 2] = c.b; // B
+                    data[pixelIndex + 3] = 255; // Alpha
+                }
+            }
+
+            // Đẩy dữ liệu pixel lại lên canvas
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        // Hàm chọn ngẫu nhiên có trọng số
+        function weightedRandom(probs) {
+            const r = Math.random();
+            let sum = 0;
+            for (let i = 0; i < probs.length; i++) {
+                sum += probs[i];
+                if (r <= sum) return i;
+            }
+            return probs.length - 1; // Fallback an toàn
+        }
+
+        function updateStats(probs, dets) {
+            const output = document.getElementById('statsOutput');
+            let html = `<strong>Determinants (Diện tích co):</strong><br>[${dets.map(n=>n.toFixed(4)).join(', ')}]<br>`;
+            html += `<strong>Probabilities (Xác suất):</strong><br>[${probs.map(n=>n.toFixed(4)).join(', ')}]`;
+            output.innerHTML = html;
+        }
+
+        // Xử lý sự kiện Sliders
+        const inputs = ['wa', 'wc', 'alpha', 'beta', 'iterations'];
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            const display = document.getElementById(`val_${id}`);
+            
+            el.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value);
+                params[id] = val;
+                display.innerText = val;
+                
+                // Yêu cầu vẽ lại ở frame tiếp theo
+                requestAnimationFrame(renderFractal);
+            });
+        });
+
+        // Vẽ lần đầu
+        renderFractal();
+
+    </script>
+</body>
+</html>
