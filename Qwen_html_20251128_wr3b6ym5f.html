@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Attractor 3D – DUYMT & F-Group</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: monospace; background: #000; color: #fff; }
+    canvas { display: block; }
+    #ui {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(0,0,0,0.85);
+      padding: 12px;
+      border-radius: 6px;
+      max-width: 420px;
+      font-size: 13px;
+      line-height: 1.4;
+      z-index: 100;
+    }
+    #ui h3 { margin: 6px 0 4px 0; font-size: 14px; }
+    #ui button {
+      margin: 4px 4px 4px 0;
+      padding: 4px 8px;
+      cursor: pointer;
+      border: none;
+      border-radius: 3px;
+      background: #2196F3;
+      color: white;
+      font-size: 12px;
+    }
+    #ui button.active { background: #4CAF50; }
+    #progress { margin-top: 8px; font-size: 12px; }
+    #ifs-formula {
+      background: #111;
+      padding: 8px;
+      margin-top: 8px;
+      border-left: 2px solid #4CAF50;
+      white-space: pre-wrap;
+      display: none;
+    }
+    .legend {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #bbb;
+    }
+    .legend span {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 4px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div>Chọn loại bề mặt:</div>
+    <button id="btn-elliptic" class="active">Elliptic (λ = +0.5)</button>
+    <button id="btn-hyperbolic">Hyperbolic (λ = -0.5)</button>
+    <div id="progress">Đang khởi tạo...</div>
+    
+    <button id="toggle-ifs">Hiện hệ hàm co</button>
+    <div id="ifs-formula"></div>
+    
+    <div class="legend">
+      <span style="background:#00ffaa"></span> f₁ &nbsp;&nbsp;
+      <span style="background:#ff6644"></span> f₂
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // === Cấu trúc IFS cố định từ bài báo ===
+    const A = [[0, 0.5], [1, 0]];
+    const d1 = [0, 0];
+    const d2 = [0.5, 0];
+
+    // === Format số: 1 chữ số, bỏ .0 ===
+    function fmt(x) {
+      const s = x.toFixed(1);
+      return s.endsWith('.0') ? s.slice(0, -2) : s;
+    }
+
+    // === Trạng thái toàn cục ===
+    let currentParams = null;
+    let currentIndex = 0;
+    let currentPoint = [0.5, 0.5, 0.5];
+    const totalPoints = 80000;
+    const pointsPerFrame = 800;
+    let ifsVisible = false;
+
+    // === Three.js ===
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 10);
+    camera.position.set(1.2, 1.2, 1.8);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // === Geometry + Material (có màu) ===
+    const positions = new Float32Array(totalPoints * 3);
+    const colors = new Float32Array(totalPoints * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({ size: 0.02, vertexColors: true, sizeAttenuation: true });
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+
+    // === Tính tham số IFS và công thức ===
+    function computeParams(lambda, type) {
+      let Q, b;
+      if (type === 'elliptic') {
+        Q = [[-2, 0], [0, -1]];
+        b = [2, 1];
+      } else {
+        Q = [[-2, 0], [0, 1]];
+        b = [2, -1];
+      }
+
+      const matVecMul = (M, v) => [M[0][0]*v[0] + M[0][1]*v[1], M[1][0]*v[0] + M[1][1]*v[1]];
+      const AT = [[0, 1], [0.5, 0]];
+
+      // f1
+      let v1 = matVecMul(AT, [b[0], b[1]]);
+      v1[0] -= lambda * b[0];
+      v1[1] -= lambda * b[1];
+      const h1 = 0;
+
+      // f2
+      const Qd2 = [Q[0][0]*0.5, 0];
+      let v2 = matVecMul(AT, [2*Qd2[0] + b[0], b[1]]);
+      v2[0] -= lambda * b[0];
+      v2[1] -= lambda * b[1];
+      const h2 = Qd2[0]*0.5 + b[0]*0.5;
+
+      const formulaText =
+`f₁([x,y,z]ᵀ) = 
+  [ ${fmt(A[0][0])}*x + ${fmt(A[0][1])}*y + ${fmt(d1[0])} ]
+  [ ${fmt(A[1][0])}*x + ${fmt(A[1][1])}*y + ${fmt(d1[1])} ]
+  [ ${fmt(v1[0])}*x + ${fmt(v1[1])}*y + ${fmt(lambda)}*z + ${fmt(h1)} ]
+
+f₂([x,y,z]ᵀ) = 
+  [ ${fmt(A[0][0])}*x + ${fmt(A[0][1])}*y + ${fmt(d2[0])} ]
+  [ ${fmt(A[1][0])}*x + ${fmt(A[1][1])}*y + ${fmt(d2[1])} ]
+  [ ${fmt(v2[0])}*x + ${fmt(v2[1])}*y + ${fmt(lambda)}*z + ${fmt(h2)} ]`;
+
+      return { lambda, v1, v2, h1, h2, formulaText };
+    }
+
+    // === Áp dụng IFS ===
+    function applyF1(pt) {
+      const [x, y, z] = pt;
+      const x1 = A[0][0]*x + A[0][1]*y + d1[0];
+      const y1 = A[1][0]*x + A[1][1]*y + d1[1];
+      const z1 = currentParams.v1[0]*x + currentParams.v1[1]*y + currentParams.lambda*z + currentParams.h1;
+      return [x1, y1, z1];
+    }
+    function applyF2(pt) {
+      const [x, y, z] = pt;
+      const x1 = A[0][0]*x + A[0][1]*y + d2[0];
+      const y1 = A[1][0]*x + A[1][1]*y + d2[1];
+      const z1 = currentParams.v2[0]*x + currentParams.v2[1]*y + currentParams.lambda*z + currentParams.h2;
+      return [x1, y1, z1];
+    }
+
+    // === Cập nhật công thức hiển thị nếu đang mở ===
+    function updateIfsDisplay() {
+      const ifsDiv = document.getElementById('ifs-formula');
+      if (ifsVisible && currentParams) {
+        ifsDiv.textContent = currentParams.formulaText;
+      }
+    }
+
+    // === Cài đặt loại bề mặt ===
+    function setupSurface(type) {
+      const lambda = type === 'elliptic' ? 0.5 : -0.5;
+      currentParams = computeParams(lambda, type);
+      currentIndex = 0;
+      currentPoint = [0.5, 0.5, 0.5];
+      document.getElementById('progress').textContent = 'Đã render: 0%';
+      document.querySelectorAll('#ui button:not(#toggle-ifs)').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(type === 'elliptic' ? 'btn-elliptic' : 'btn-hyperbolic').classList.add('active');
+      updateIfsDisplay(); // ⬅️ CẬP NHẬT CÔNG THỨC NGAY LẬP TỨC
+    }
+
+    // === Render ===
+    function addPoints() {
+      if (!currentParams) return;
+      for (let i = 0; i < pointsPerFrame; i++) {
+        if (currentIndex >= totalPoints) return;
+        if (Math.random() < 0.5) {
+          currentPoint = applyF1(currentPoint);
+          colors[currentIndex * 3] = 0.0;
+          colors[currentIndex * 3 + 1] = 1.0;
+          colors[currentIndex * 3 + 2] = 0.66;
+        } else {
+          currentPoint = applyF2(currentPoint);
+          colors[currentIndex * 3] = 1.0;
+          colors[currentIndex * 3 + 1] = 0.4;
+          colors[currentIndex * 3 + 2] = 0.27;
+        }
+        positions[currentIndex * 3] = currentPoint[0];
+        positions[currentIndex * 3 + 1] = currentPoint[1];
+        positions[currentIndex * 3 + 2] = currentPoint[2];
+        currentIndex++;
+      }
+      const p = Math.round((currentIndex / totalPoints) * 100);
+      document.getElementById('progress').textContent = `Đã render: ${p}%`;
+      geometry.attributes.position.needsUpdate = true;
+      geometry.attributes.color.needsUpdate = true;
+    }
+
+    // === Vòng lặp ===
+    function animate() {
+      requestAnimationFrame(animate);
+      if (currentIndex < totalPoints) addPoints();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // === Sự kiện nút loại ===
+    document.getElementById('btn-elliptic').addEventListener('click', () => setupSurface('elliptic'));
+    document.getElementById('btn-hyperbolic').addEventListener('click', () => setupSurface('hyperbolic'));
+
+    // === Nút ẩn/hiện IFS ===
+    const toggleBtn = document.getElementById('toggle-ifs');
+    toggleBtn.addEventListener('click', () => {
+      ifsVisible = !ifsVisible;
+      const ifsDiv = document.getElementById('ifs-formula');
+      ifsDiv.style.display = ifsVisible ? 'block' : 'none';
+      toggleBtn.textContent = ifsVisible ? 'Ẩn hệ hàm co' : 'Hiện hệ hàm co';
+      if (ifsVisible) updateIfsDisplay(); // Hiển thị công thức mới nhất
+    });
+
+    // === Resize ===
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // === Khởi tạo ===
+    setupSurface('elliptic');
+  </script>
+</body>
+</html>
