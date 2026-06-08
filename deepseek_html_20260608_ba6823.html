@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trắc nghiệm: Kiến trúc vô tận – Lát gạch Penrose</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['\\(', '\\)']],
+                displayMath: [['\\[', '\\]']]
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f0f2f8;
+            color: #1e2a3e;
+            padding: 30px 20px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #2c3e66, #1a2a4f);
+            color: white;
+            padding: 28px 24px;
+            border-radius: 32px;
+            margin-bottom: 36px;
+            text-align: center;
+            box-shadow: 0 12px 20px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            font-size: 2rem;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+        .header p {
+            opacity: 0.85;
+            font-style: italic;
+        }
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 40px 0 20px 0;
+            padding-left: 12px;
+            border-left: 7px solid #9b59b6;
+            color: #2c3e66;
+        }
+        .question-card {
+            background: white;
+            border-radius: 28px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+            margin-bottom: 28px;
+            padding: 22px 26px;
+            transition: all 0.2s ease;
+            border: 1px solid #e9eef3;
+        }
+        .question-text {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1f2b3c;
+            margin-bottom: 18px;
+            background: #f8fafd;
+            padding: 12px 18px;
+            border-radius: 20px;
+        }
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .opt-btn {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 60px;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: left;
+            cursor: pointer;
+            transition: 0.15s;
+            display: flex;
+            align-items: center;
+            font-family: inherit;
+            color: #1e293b;
+        }
+        .opt-btn:hover:not(:disabled) {
+            background: #eef2ff;
+            border-color: #9b59b6;
+            transform: scale(1.01);
+        }
+        .opt-letter {
+            font-weight: 800;
+            background: #e2e8f0;
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 40px;
+            margin-right: 16px;
+            font-size: 1.1rem;
+            transition: 0.1s;
+        }
+        .opt-btn.correct {
+            background: #2ecc71;
+            border-color: #27ae60;
+            color: white;
+        }
+        .opt-btn.correct .opt-letter {
+            background: white;
+            color: #2ecc71;
+        }
+        .opt-btn.incorrect {
+            background: #e74c3c;
+            border-color: #c0392b;
+            color: white;
+        }
+        .opt-btn.incorrect .opt-letter {
+            background: white;
+            color: #e74c3c;
+        }
+        .explanation {
+            background: #f9f3fe;
+            border-left: 6px solid #9b59b6;
+            padding: 16px 20px;
+            border-radius: 20px;
+            margin-top: 14px;
+            display: none;
+            font-size: 0.95rem;
+            color: #2d3e5a;
+        }
+        .explanation strong {
+            color: #6c3483;
+        }
+        .feedback {
+            margin-top: 12px;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            font-size: 0.85rem;
+            color: #5a6e85;
+        }
+        @media (max-width: 700px) {
+            .question-card { padding: 16px; }
+            .question-text { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🧩 KIẾN TRÚC VÔ TẬN</h1>
+        <p>Lát gạch Penrose – Hệ thống thay thế & Cấu trúc không tuần hoàn</p>
+        <p style="font-size: 0.9rem; margin-top: 8px;">✨ Chọn đáp án – Xem ngay kết quả + giải thích chi tiết ✨</p>
+    </div>
+    <div id="quiz-root"></div>
+    <footer>📐 Dựa trên bài giảng "Thay thế → Phóng to → Lặp lại vô hạn" | Tỷ lệ vàng φ | Tự đồng dạng</footer>
+</div>
+
+<script>
+    // ------------------- DỮ LIỆU 20 CÂU (5 lý thuyết, 5 dễ, 5 TB, 5 khó) -------------------
+    const questionsData = [
+        // ========== 5 LÝ THUYẾT ==========
+        { 
+            category: "📘 LÝ THUYẾT CỐT LÕI",
+            text: "Ba bước cốt lõi tạo nên hoa văn Penrose theo thứ tự đúng là?",
+            options: ["Phóng to → Thay thế → Lặp lại", "Thay thế → Phóng to → Lặp lại", "Lặp lại → Thay thế → Phóng to", "Thay thế → Lặp lại → Phóng to"],
+            correct: 1,
+            explanation: "✅ Quy trình chuẩn: <strong>Thay thế</strong> từng viên gạch → <strong>Phóng to</strong> toàn bộ cấu trúc → <strong>Lặp lại vô hạn</strong>. Đó là linh hồn của Penrose Tiling."
+        },
+        { 
+            category: "📘 LÝ THUYẾT CỐT LÕI",
+            text: "Penrose Tiling được gọi là 'không tuần hoàn' (aperiodic) vì:",
+            options: ["Không thể lát kín mặt phẳng", "Không có quy tắc thay thế", "Không tồn tại vectơ tịnh tiến lặp lại toàn bộ cấu trúc", "Chỉ dùng 1 loại gạch"],
+            correct: 2,
+            explanation: "🔁 Không tuần hoàn nghĩa là không có mẫu cơ bản lặp lại tuần hoàn. Penrose có trật tự nhưng không lặp chính xác theo chu kỳ."
+        },
+        { 
+            category: "📘 LÝ THUYẾT CỐT LÕI",
+            text: "Tính chất 'tự đồng dạng' (self-similarity) của hoa văn Penrose có nghĩa là:",
+            options: ["Mỗi viên gạch có màu sắc giống nhau", "Phóng to hay thu nhỏ vẫn thấy cấu trúc tương tự", "Diện tích không đổi sau mỗi lần lặp", "Số viên gạch không thay đổi"],
+            correct: 1,
+            explanation: "🌀 Tự đồng dạng: cấu trúc lặp lại chính nó ở các tỉ lệ khác nhau – một đặc trưng fractal."
+        },
+        { 
+            category: "📘 LÝ THUYẾT CỐT LÕI",
+            text: "Mục đích chính của bước 'Phóng to' trong quy trình tạo Penrose là gì?",
+            options: ["Tạo màu sắc đẹp hơn", "Đưa các viên gạch nhỏ về kích thước ban đầu, làm tăng diện tích bao phủ", "Giảm độ phức tạp", "Xóa bỏ chi tiết thừa"],
+            correct: 1,
+            explanation: "📏 Sau thay thế, các viên gạch nhỏ lại. Phóng to giúp chúng trở về kích thước chuẩn → diện tích mở rộng."
+        },
+        { 
+            category: "📘 LÝ THUYẾT CỐT LÕI",
+            text: "Theo bài giảng, 'vô tận' của Penrose thể hiện ở hai phương diện nào?",
+            options: ["Vô tận về màu sắc và chất liệu", "Vô tận về diện tích (chiều rộng) và độ phức tạp chi tiết (chiều sâu)", "Vô tận về số loại gạch và số góc cạnh", "Chỉ vô tận về lý thuyết, không ứng dụng được"],
+            correct: 1,
+            explanation: "🌌 Vô tận chiều rộng (phủ mặt phẳng vô hạn) và vô tận chiều sâu (chi tiết càng lúc càng phức tạp sau mỗi lần lặp)."
+        },
+
+        // ========== 5 BÀI TẬP DỄ ==========
+        { 
+            category: "📗 BÀI TẬP DỄ",
+            text: "Tỷ lệ vàng \\(\\phi\\) xấp xỉ bằng bao nhiêu?",
+            options: ["1.414", "3.1416", "1.618", "2.718"],
+            correct: 2,
+            explanation: "✨ \\(\\phi = \\frac{1+\\sqrt{5}}{2} \\approx 1.618033...\\) – con số xuất hiện khắp Penrose."
+        },
+        { 
+            category: "📗 BÀI TẬP DỄ",
+            text: "Trong mô hình Penrose P2 (diều & mũi tên), quy tắc thay thế hình mũi tên (dart) là:",
+            options: ["2 diều + 1 mũi tên", "1 diều + 2 mũi tên", "3 mũi tên", "2 diều + 2 mũi tên"],
+            correct: 1,
+            explanation: "🎯 Theo bài giảng: Hình mũi tên (dart) → <strong>1 diều + 2 mũi tên</strong>."
+        },
+        { 
+            category: "📗 BÀI TẬP DỄ",
+            text: "Ai là người phát minh ra lát gạch Penrose vào những năm 1970?",
+            options: ["Dan Shechtman", "Fibonacci", "Roger Penrose", "Euclid"],
+            correct: 2,
+            explanation: "🏆 Roger Penrose – nhà vật lý toán học người Anh, sau này đoạt giải Nobel Vật lý 2020."
+        },
+        { 
+            category: "📗 BÀI TẬP DỄ",
+            text: "Dan Shechtman nhận giải Nobel Hóa học 2011 nhờ phát hiện ra:",
+            options: ["Dãy Fibonacci", "Lát gạch Penrose", "Tinh thể gần tuần hoàn (Quasicrystal)", "Tỷ lệ vàng trong kiến trúc"],
+            correct: 2,
+            explanation: "🔬 Quasicrystal có cấu trúc đối xứng bậc 5 giống Penrose, phá vỡ định nghĩa tinh thể truyền thống."
+        },
+        { 
+            category: "📗 BÀI TẬP DỄ",
+            text: "Sau một lần 'Thay thế + Phóng to', số lượng viên gạch trong Penrose thay đổi thế nào?",
+            options: ["Giảm đi một nửa", "Tăng theo cấp số nhân (khoảng 2.618 lần)", "Không đổi", "Tăng gấp đôi chính xác"],
+            correct: 1,
+            explanation: "📈 Tỉ lệ tăng ≈ \\(\\phi^2 \\approx 2.618\\). Ví dụ 1 → 3 → 8 → 21 ..."
+        },
+
+        // ========== 5 BÀI TẬP TRUNG BÌNH ==========
+        { 
+            category: "📙 BÀI TẬP TRUNG BÌNH",
+            text: "Hệ thức truy hồi nào đúng cho số lượng hình diều \\(k_n\\) và hình mũi tên \\(d_n\\) trong Penrose?",
+            options: ["\\(k_{n+1}=k_n+d_n\\)", "\\(k_{n+1}=2k_n+d_n\\) và \\(d_{n+1}=k_n+2d_n\\)", "\\(k_{n+1}=k_n+2d_n\\)", "\\(d_{n+1}=2k_n+2d_n\\)"],
+            correct: 1,
+            explanation: "📐 Đúng: \\(k_{n+1} = 2k_n + d_n\\); \\(d_{n+1} = k_n + 2d_n\\). Tổng số gạch tăng theo \\(\\phi^{2n}\\)."
+        },
+        { 
+            category: "📙 BÀI TẬP TRUNG BÌNH",
+            text: "Tại sao tỷ lệ vàng \\(\\phi\\) xuất hiện tự nhiên trong lát gạch Penrose?",
+            options: ["Do Penrose cố tình đặt tỉ lệ đó", "Vì tỉ lệ số lượng hai loại gạch tiến dần đến \\(\\phi\\)", "Vì diện tích mỗi viên gạch bằng \\(\\phi\\)", "Ngẫu nhiên không có ý nghĩa"],
+            correct: 1,
+            explanation: "🌿 Qua các bước thay thế, tỉ lệ (số diều)/(số mũi tên) hội tụ về \\(\\phi\\)."
+        },
+        { 
+            category: "📙 BÀI TẬP TRUNG BÌNH",
+            text: "Nếu lần lặp thứ 0 có 1 viên gạch, sau 2 lần lặp (đủ thay thế + phóng to) số viên gạch xấp xỉ?",
+            options: ["2 viên", "5 viên", "8 viên", "13 viên"],
+            correct: 2,
+            explanation: "Sau lần 1: 3 viên; sau lần 2: 3×2.618 ≈ 8 viên. (Chuẩn: 1→3→8→21...)"
+        },
+        { 
+            category: "📙 BÀI TẬP TRUNG BÌNH",
+            text: "Tính chất 'không tuần hoàn' của Penrose khác biệt với lát gạch thông thường ở điểm nào?",
+            options: ["Không có quy tắc thay thế", "Có thể lát bằng 1 loại gạch", "Không có ô cơ bản lặp tuần hoàn", "Không phủ kín được mặt phẳng"],
+            correct: 2,
+            explanation: "🔄 Lát gạch thông thường (hình vuông, tam giác đều) có tính tuần hoàn. Penrose thì không."
+        },
+        { 
+            category: "📙 BÀI TẬP TRUNG BÌNH",
+            text: "Đặc điểm nào dưới đây KHÔNG phải của lát gạch Penrose?",
+            options: ["Có tính tự đồng dạng", "Tỉ lệ vàng xuất hiện", "Lặp lại tuần hoàn với chu kỳ nhỏ", "Được tạo bằng hệ thống thay thế"],
+            correct: 2,
+            explanation: "❌ Penrose KHÔNG tuần hoàn → không thể lặp lại một ô nhỏ để phủ kín mặt phẳng theo chu kỳ."
+        },
+
+        // ========== 5 BÀI TẬP KHÓ ==========
+        { 
+            category: "📕 BÀI TẬP KHÓ",
+            text: "Gọi \\(S_n\\) là tổng số gạch sau n lần lặp. Biết \\(S_0=1, S_1=3, S_2=8\\), công thức xấp xỉ nào đúng?",
+            options: ["\\(S_n \\approx n^2\\)", "\\(S_n \\approx \\phi^{2n}\\)", "\\(S_n \\approx 2^n\\)", "\\(S_n \\approx n\\phi\\)"],
+            correct: 1,
+            explanation: "📈 \\(S_n \\approx c \\cdot \\phi^{2n}\\) với \\(\\phi^2 \\approx 2.618\\), tăng theo cấp số nhân."
+        },
+        { 
+            category: "📕 BÀI TẬP KHÓ",
+            text: "Vì sao phát hiện quasicrystal của Shechtman ban đầu bị nghi ngờ?",
+            options: ["Vi phạm định luật bảo toàn", "Cấu trúc không tuần hoàn nhưng có trật tự, mâu thuẫn với định nghĩa tinh thể cổ điển", "Không liên quan đến tỷ lệ vàng", "Chỉ tồn tại trong toán học"],
+            correct: 1,
+            explanation: "⚛️ Tinh thể truyền thống yêu cầu tuần hoàn. Quasicrystal mang đối xứng cấm (bậc 5) giống Penrose, gây tranh cãi."
+        },
+        { 
+            category: "📕 BÀI TẬP KHÓ",
+            text: "Từ 'que tính mẫu giáo' đến 'giải Nobel 2011', thông điệp xuyên suốt bài giảng là gì?",
+            options: ["Phải học thuộc lòng thật nhiều", "Nguyên lý thay thế – lặp lại – mở rộng tạo nên đột phá", "Chỉ cần que tính là đủ", "Toán học rời rạc không quan trọng"],
+            correct: 1,
+            explanation: "🧬 Cùng một linh hồn: <strong>thay thế → phóng to → lặp lại</strong> từ que tính đến tinh thể gần tuần hoàn."
+        },
+        { 
+            category: "📕 BÀI TẬP KHÓ",
+            text: "Trong ẩn dụ 'cưỡi ngựa', 'dạy cách cưỡi' (quy tắc) tốt hơn 'điều khiển từng bước chân' vì:",
+            options: ["Ngựa chạy nhanh hơn", "Quy tắc giúp thích ứng và sinh ra vô hạn trạng thái mới", "Tốn ít thời gian hơn", "Không cần huấn luyện"],
+            correct: 1,
+            explanation: "🤖 Nắm quy tắc thay thế → sinh ra vô hạn hoa văn; chỉ nhớ dữ liệu thô sẽ bế tắc trước vô hạn."
+        },
+        { 
+            category: "📕 BÀI TẬP KHÓ",
+            text: "Nếu ta thay đổi quy tắc thay thế một cách ngẫu nhiên, điều gì xảy ra với 'kiến trúc vô tận'?",
+            options: ["Vẫn có tính tự đồng dạng", "Có thể mất tính không tuần hoàn hoặc không còn lát kín mặt phẳng", "Tỉ lệ vàng vẫn y hệt", "Không ảnh hưởng"],
+            correct: 1,
+            explanation: "⚠️ Quy tắc thay thế quyết định cấu trúc. Thay đổi tùy tiện có thể phá vỡ tính lát kín hoặc tạo ra tuần hoàn."
+        }
+    ];
+
+    // Render toàn bộ
+    const root = document.getElementById("quiz-root");
+    let lastCategory = "";
+
+    function buildQuiz() {
+        root.innerHTML = "";
+        questionsData.forEach((q, idx) => {
+            if (q.category !== lastCategory) {
+                lastCategory = q.category;
+                const sectionDiv = document.createElement("div");
+                sectionDiv.className = "section-title";
+                sectionDiv.innerText = q.category;
+                root.appendChild(sectionDiv);
+            }
+            const card = document.createElement("div");
+            card.className = "question-card";
+            card.id = `qcard-${idx}`;
+
+            const qText = document.createElement("div");
+            qText.className = "question-text";
+            qText.innerHTML = `<span style="background:#9b59b6; color:white; border-radius:40px; display:inline-block; width:28px; text-align:center; margin-right:12px;">${idx+1}</span> ${q.text}`;
+            card.appendChild(qText);
+
+            const optsDiv = document.createElement("div");
+            optsDiv.className = "options";
+            const letters = ["A", "B", "C", "D"];
+            q.options.forEach((opt, optIdx) => {
+                const btn = document.createElement("button");
+                btn.className = "opt-btn";
+                btn.setAttribute("data-opt", optIdx);
+                btn.innerHTML = `<span class="opt-letter">${letters[optIdx]}</span> ${opt}`;
+                btn.onclick = () => handleAnswer(idx, optIdx);
+                optsDiv.appendChild(btn);
+            });
+            card.appendChild(optsDiv);
+
+            const explDiv = document.createElement("div");
+            explDiv.className = "explanation";
+            explDiv.id = `expl-${idx}`;
+            explDiv.innerHTML = `<strong>📖 Giải thích:</strong> ${q.explanation}`;
+            card.appendChild(explDiv);
+
+            root.appendChild(card);
+        });
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            MathJax.typesetPromise();
+        }
+    }
+
+    function handleAnswer(qid, selected) {
+        const q = questionsData[qid];
+        const card = document.getElementById(`qcard-${qid}`);
+        const btns = card.querySelectorAll(".opt-btn");
+        const explBox = document.getElementById(`expl-${qid}`);
+        
+        // nếu đã trả lời rồi thì không cho trả lời lại
+        if (btns[0].disabled) return;
+        
+        // tô màu đáp án đúng
+        btns[q.correct].classList.add("correct");
+        
+        let feedbackHtml = "";
+        if (selected === q.correct) {
+            btns[selected].classList.add("correct");
+            feedbackHtml = '<div class="feedback" style="color:#2ecc71; margin-top:10px;">✅ CHÍNH XÁC! Bạn đã chọn đúng.</div>';
+        } else {
+            btns[selected].classList.add("incorrect");
+            feedbackHtml = `<div class="feedback" style="color:#e74c3c; margin-top:10px;">❌ SAI rồi. Đáp án đúng là ${String.fromCharCode(65+q.correct)}: ${q.options[q.correct]}</div>`;
+        }
+        
+        // hiện explanation + feedback
+        explBox.style.display = "block";
+        // kiểm tra xem đã có feedback cũ chưa
+        const oldFeedback = explBox.querySelector(".feedback");
+        if (oldFeedback) oldFeedback.remove();
+        explBox.insertAdjacentHTML("beforeend", feedbackHtml);
+        
+        // vô hiệu hóa tất cả nút
+        btns.forEach(btn => {
+            btn.disabled = true;
+            btn.style.cursor = "default";
+        });
+        
+        // gọi lại mathjax cho công thức nếu có trong expl
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            MathJax.typesetPromise([explBox]);
+        }
+    }
+
+    buildQuiz();
+</script>
+</body>
+</html>
